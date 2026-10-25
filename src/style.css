@@ -1,0 +1,173 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-bull: var(--bull);
+  --color-bear: var(--bear);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+}
+
+:root {
+  /* Phird Options — light mode */
+  --radius: 0;
+  --background: #ffffff;
+  --foreground: #000000;
+  --surface: #f4f4f4;
+  --elevated: #f4f4f4;
+  --card: #f4f4f4;
+  --card-foreground: #000000;
+  --popover: #ffffff;
+  --popover-foreground: #000000;
+  --primary: #000000;
+  --primary-foreground: #ffffff;
+  --secondary: transparent;
+  --secondary-foreground: #000000;
+  --muted: #f4f4f4;
+  --muted-foreground: #5c5c5c;
+  --accent: #f4f4f4;
+  --accent-foreground: #000000;
+  --destructive: #000000;
+  --destructive-foreground: #ffffff;
+  --border: #d4d4d4;
+  --input: #d4d4d4;
+  --ring: #000000;
+  --bull: #000000;
+  --bear: #000000;
+  --chart-1: #000000;
+  --chart-2: #5c5c5c;
+  --chart-3: #999999;
+  --chart-4: #d4d4d4;
+  --chart-5: #f4f4f4;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
+  --sidebar-primary: #000000;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f4f4f4;
+  --sidebar-accent-foreground: #000000;
+  --sidebar-border: #d4d4d4;
+  --sidebar-ring: #000000;
+}
+
+.dark {
+  /* Phird Options — dark mode (default) */
+  --background: #000000;
+  --foreground: #ffffff;
+  --surface: #0d0d0d;
+  --elevated: #0d0d0d;
+  --card: #0d0d0d;
+  --card-foreground: #ffffff;
+  --popover: #000000;
+  --popover-foreground: #ffffff;
+  --primary: #ffffff;
+  --primary-foreground: #000000;
+  --secondary: transparent;
+  --secondary-foreground: #ffffff;
+  --muted: #0d0d0d;
+  --muted-foreground: #999999;
+  --accent: #0d0d0d;
+  --accent-foreground: #ffffff;
+  --destructive: #ffffff;
+  --destructive-foreground: #000000;
+  --border: #2b2b2b;
+  --input: #2b2b2b;
+  --ring: #ffffff;
+  --bull: #ffffff;
+  --bear: #ffffff;
+  --chart-1: #ffffff;
+  --chart-2: #999999;
+  --chart-3: #5c5c5c;
+  --chart-4: #2b2b2b;
+  --chart-5: #0d0d0d;
+  --sidebar: #000000;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #0d0d0d;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #2b2b2b;
+  --sidebar-ring: #ffffff;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+    border-radius: 0 !important;
+    font-variant-numeric: tabular-nums;
+    font-family: "IBM Plex Sans", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6, button, .font-heading {
+    font-family: "Chakra Petch", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    text-rendering: optimizeLegibility;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--color-foreground);
+    outline-offset: 3px;
+  }
+
+  button[class*="bg-foreground"][class*="text-background"],
+  button[class*="bg-primary"][class*="text-primary-foreground"] {
+    color: var(--background) !important;
+  }
+
+  .dark button[class*="bg-foreground"][class*="text-background"],
+  .dark button[class*="bg-primary"][class*="text-primary-foreground"] {
+    color: #000000 !important;
+  }
+}
