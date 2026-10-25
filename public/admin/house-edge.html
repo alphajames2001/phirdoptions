@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet" />
+<title>Phird Options Admin · House Edge (debug)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+   body {
+     font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+     background: #000000; color: #ffffff; min-height: 100vh; padding: 20px;
+   }
+  .wrap { max-width: 1400px; margin: 0 auto; }
+  header {
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
+    gap: 12px; padding: 16px 0; border-bottom: 1px solid #222; margin-bottom: 20px;
+  }
+   header h1 {
+     font-size: 24px; font-weight: 600;
+     font-family: 'Chakra Petch', sans-serif;
+     letter-spacing: -0.01em;
+     color: #ffffff;
+   }
+  header .sub { font-size: 14px; color: #888; margin-top: 2px; }
+  .btn {
+    padding: 8px 16px; border: 1px solid #333; border-radius: 0; 6px; font-size: 13px;
+    cursor: pointer; background: transparent; color: #e6e6e6; transition: background .15s;
+  }
+  .btn:hover:not(:disabled) { background: #1f1f1f; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-primary { background: #ffffff; border-color: #00c853; color: #000000; font-weight: 600; }
+  .btn-primary:hover:not(:disabled) { background: #ffffff; filter: invert(1); }
+  .btn-danger { border-color: #7a2a2a; color: #ff8a8a; }
+
+  .banner {
+    background: #3a1212; border: 1px solid #ff4d4d; color: #ffb3b3; border-radius: 0; 8px;
+    padding: 12px 16px; margin-bottom: 20px; font-size: 13px; line-height: 1.5;
+  }
+  .banner strong { color: #ff6b6b; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 0; 8px; padding: 16px; }
+  .card h2 { font-size: 16px; font-weight: 600; }
+  .card .desc { font-size: 12px; color: #888; margin: 4px 0 14px; min-height: 32px; }
+  .seg { display: flex; border: 1px solid #333; border-radius: 0; 6px; overflow: hidden; margin-bottom: 14px; }
+  .seg label { flex: 1; text-align: center; padding: 7px 4px; font-size: 12px; cursor: pointer; color: #aaa; }
+  .seg input { display: none; }
+  .seg input:checked + span { color: #000000; }
+  .seg label:has(input:checked) { background: #ffffff; color: #000000; font-weight: 600; }
+  .row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .row input[type=range] { flex: 1; accent-color: #37D948; }
+  .row input[type=number] {
+    width: 80px; background: #0d0d0d; border: 1px solid #333; border-radius: 0; 6px;
+    color: #e6e6e6; padding: 6px 8px; font-size: 13px;
+  }
+  .edge { font-size: 13px; color: #bbb; margin-bottom: 14px; }
+  .edge b { color: #fff; }
+  .actions { display: flex; gap: 8px; }
+  .active-state { margin-top: 12px; font-size: 12px; color: #888; border-top: 1px solid #2a2a2a; padding-top: 10px; }
+  .active-state b { color: #37D948; font-weight: 600; }
+  .dim { opacity: .4; pointer-events: none; }
+
+  .table-card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 0; 8px; padding: 16px; }
+  .table-card h2 { font-size: 16px; margin-bottom: 4px; }
+  .table-card .desc { font-size: 12px; color: #888; margin-bottom: 12px; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 760px; }
+  th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid #242424; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: #999; font-weight: 500; font-size: 12px; position: sticky; top: 0; background: #1a1a1a; }
+  td .rtp { color: #888; font-size: 11px; margin-left: 4px; }
+  td.bad { color: #ff7b7b; }
+  td.bad .rtp { color: #ff7b7b; }
+  td.changed { color: #37D948; }
+  tr:hover td { background: #202020; }
+  .legend { margin-top: 10px; font-size: 12px; color: #888; }
+  .legend .bad { color: #ff7b7b; }
+  .legend .changed { color: #37D948; }
+
+  .banner.warn { background: #2e2410; border-color: #d9a400; color: #ffe08a; }
+  .banner.warn strong { color: #ffc400; }
+  .section-title { font-size: 18px; font-weight: 600; margin: 8px 0 4px; }
+  .section-sub { font-size: 12px; color: #888; margin-bottom: 14px; }
+  .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 14px; cursor: pointer; }
+  .toggle input { accent-color: #37D948; width: 16px; height: 16px; }
+  .field { background: #0d0d0d; border: 1px solid #333; border-radius: 0; 6px; color: #e6e6e6; padding: 7px 8px; font-size: 13px; }
+  .form-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .form-row .grow { flex: 1; min-width: 260px; }
+  .rule { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #242424; font-size: 13px; }
+  .rule code { word-break: break-all; }
+  .stats { margin-top: 10px; font-size: 12px; color: #888; }
+  .stats b { color: #37D948; }
+  .msg { text-align: center; padding: 80px 20px; color: #aaa; }
+  .msg h2 { color: #e6e6e6; margin-bottom: 8px; }
+  code { background: #1f1f1f; padding: 2px 6px; border-radius: 0; 4px; font-size: 12px; }
+  #toast {
+    position: fixed; bottom: 20px; right: 20px; background: #1f1f1f; border: 1px solid #333;
+    border-radius: 0; 6px; padding: 10px 16px; font-size: 13px; opacity: 0; transition: opacity .25s;
+    pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+  #toast.error { border-color: #ff4d4d; color: #ffb3b3; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>House Edge Controls</h1>
+      <div class="sub">Developer debug tool · payout tuning per account class</div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-danger" id="resetAllBtn" style="display:none" onclick="resetClass()">Reset all to defaults</button>
+      <button class="btn" onclick="goBack()">← Back to Admin</button>
+    </div>
+  </header>
+
+  <div id="content"><div class="msg">Loading…</div></div>
+</div>
+<div id="toast"></div>
+
+<script>
+  const API_URL = window.location.origin;
+  const CLASS_META = {
+    demo:       { title: 'Demo accounts',       desc: 'Any user trading on their demo account.' },
+    influencer: { title: 'Influencer accounts', desc: 'Real account of users who have the influencer role.' },
+    real:       { title: 'Normal accounts',     desc: 'Real account of every other user.' },
+  };
+  const ORDER = ['demo', 'influencer', 'real'];
+
+  let state = null;    // last snapshot from server
+  const draft = {};    // unsaved edits per class: { mode, rtp }
+  const draftFo = {};  // unsaved forced-outcome edits per class: { enabled, winRate }
+
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const pct = (n, d = 1) => (n * 100).toFixed(d) + '%';
+
+  function toast(msg, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.className = 'show ' + type;
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => (el.className = ''), 2800);
+  }
+
+  // This page is only reachable via a single-use ticket from the dashboard,
+  // so history.back() would land on a spent ticket (and bounce to login).
+  function goBack() { location.href = '/admin/dashboard.html'; }
+
+  // Drop the ticket from the address bar / history as soon as the page loads.
+  history.replaceState({}, document.title, location.pathname);
+
+  async function api(path, options = {}) {
+    const token = sessionStorage.getItem('gwave_admin_token');
+    if (!token) { location.href = '/admin/login.html'; throw new Error('No session'); }
+    const res = await fetch(API_URL + path, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    });
+    let data = {};
+    try { data = await res.json(); } catch (_) {}
+    if (res.status === 401) {
+      sessionStorage.removeItem('gwave_admin_token');
+      location.href = '/admin/login.html';
+    } else if (res.status === 403) {
+      location.href = '/admin/login.html'; // signed in, but not an admin
+    }
+    if (!res.ok) { const e = new Error(data.error || 'Request failed'); e.status = res.status; throw e; }
+    return data;
+  }
+
+  async function load() {
+    try {
+      const r = await api('/admin/debug/house-edge');
+      state = r.data;
+      for (const c of ORDER) { draft[c] = { ...state.config[c] }; draftFo[c] = { ...state.forced.classes[c] }; }
+      render();
+    } catch (e) {
+      const off = e.status === 404;
+      document.getElementById('content').innerHTML = off
+        ? `<div class="msg"><h2>Debug mode is off</h2>
+             This page only works when the server runs with <code>DEBUG_MODE=true</code>
+             (and <code>NODE_ENV</code> is not <code>production</code>).</div>`
+        : `<div class="msg"><h2>Couldn't load</h2>${esc(e.message)}</div>`;
+    }
+  }
+
+  function render() {
+    document.getElementById('resetAllBtn').style.display = '';
+    const lim = state.limits;
+    document.getElementById('content').innerHTML = `
+      <div class="banner">
+        <strong>⚠ DEBUG MODE.</strong> House edge overrides change what <em>new</em> winning trades pay; ticks are never touched,
+        and open trades keep the payout they were placed with.
+        Settings live in server memory only and reset on restart. Never enable <code>DEBUG_MODE</code> in production.
+      </div>
+      <div class="grid">${ORDER.map(cardHtml).join('')}</div>
+
+      <div class="section-title">Forced outcomes</div>
+      <div class="section-sub">Test tool for bot stop-loss / take-profit. Targeted accounts win this % of their <em>new</em> trades regardless of what the market did.</div>
+      <div class="banner warn">
+        <strong>This changes real settlement results.</strong> A forced win pays the stake's stored payout and a forced loss takes the stake,
+        even if the market went the other way. Only accounts you target here are affected. Prefer a specific demo account; if you target
+        a class that includes real-money accounts, those users' balances change too. A rule applies to trades placed <em>after</em> you save it;
+        already-open trades keep the outcome they were placed under.
+      </div>
+      <div class="grid">${ORDER.map(foCardHtml).join('')}</div>
+      ${accountRulesHtml()}
+      <div class="table-card">
+        <h2>Payout preview</h2>
+        <div class="desc">Multiplier (and implied RTP) for each bet, assuming uniformly random digits.
+          “Default” is the fixed table in <code>market.js</code>.</div>
+        <div class="scroll"><table id="previewTable"></table></div>
+        <div class="legend">
+          <span class="bad">Red</span> = RTP above 100% (the player has the edge) ·
+          <span class="changed">Green</span> = differs from default ·
+          Allowed RTP range ${lim.rtpMin}–${lim.rtpMax}, minimum multiplier ${lim.minMultiplier}×
+        </div>
+      </div>`;
+    ORDER.forEach(bindCard);
+    ORDER.forEach(bindFo);
+    bindAccountRules();
+    renderTable();
+  }
+
+  function cardHtml(c) {
+    const d = draft[c], m = CLASS_META[c], lim = state.limits;
+    return `
+      <div class="card" id="card-${c}">
+        <h2>${m.title}</h2>
+        <div class="desc">${m.desc}</div>
+        <div class="seg">
+          <label><input type="radio" name="mode-${c}" value="default" ${d.mode === 'default' ? 'checked' : ''}><span>Default table</span></label>
+          <label><input type="radio" name="mode-${c}" value="rtp" ${d.mode === 'rtp' ? 'checked' : ''}><span>Target RTP</span></label>
+        </div>
+        <div id="rtpbox-${c}" class="${d.mode === 'rtp' ? '' : 'dim'}">
+          <div class="row">
+            <input type="range" id="slider-${c}" min="${lim.rtpMin}" max="${lim.rtpMax}" step="0.005" value="${d.rtp}">
+            <input type="number" id="num-${c}" min="${lim.rtpMin}" max="${lim.rtpMax}" step="0.005" value="${d.rtp}">
+          </div>
+          <div class="edge" id="edge-${c}"></div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" id="apply-${c}">Apply</button>
+          <button class="btn" id="reset-${c}">Reset</button>
+        </div>
+        <div class="active-state" id="active-${c}"></div>
+      </div>`;
+  }
+
+  function bindCard(c) {
+    const d = draft[c];
+    const slider = document.getElementById('slider-' + c);
+    const num = document.getElementById('num-' + c);
+    const box = document.getElementById('rtpbox-' + c);
+
+    const sync = () => {
+      document.getElementById('edge-' + c).innerHTML =
+        `RTP <b>${pct(d.rtp)}</b> → house edge <b>${pct(1 - d.rtp)}</b>`;
+      slider.value = d.rtp; num.value = d.rtp;
+      box.className = d.mode === 'rtp' ? '' : 'dim';
+      const a = state.config[c];
+      document.getElementById('active-' + c).innerHTML = a.mode === 'rtp'
+        ? `Active: <b>Target RTP ${pct(a.rtp)}</b> (edge ${pct(1 - a.rtp)})`
+        : `Active: <b>Default table</b>`;
+      document.getElementById('apply-' + c).disabled =
+        d.mode === a.mode && (d.mode === 'default' || d.rtp === a.rtp);
+    };
+
+    document.querySelectorAll(`input[name="mode-${c}"]`).forEach((r) =>
+      r.addEventListener('change', () => { d.mode = r.value; sync(); }));
+    slider.addEventListener('input', () => { d.rtp = Number(slider.value); sync(); });
+    num.addEventListener('input', () => {
+      const v = Number(num.value);
+      if (Number.isFinite(v)) { d.rtp = v; sync(); }
+    });
+    document.getElementById('apply-' + c).addEventListener('click', () => apply(c));
+    document.getElementById('reset-' + c).addEventListener('click', () => resetClass(c));
+    sync();
+  }
+
+  // ── Forced outcomes ──
+  function foCardHtml(c) {
+    const d = draftFo[c], m = CLASS_META[c];
+    return `
+      <div class="card" id="fo-card-${c}">
+        <h2>${m.title}</h2>
+        <div class="desc">${m.desc}</div>
+        <label class="toggle"><input type="checkbox" id="fo-en-${c}" ${d.enabled ? 'checked' : ''}> Force outcomes for this group</label>
+        <div id="fo-box-${c}" class="${d.enabled ? '' : 'dim'}">
+          <div class="row">
+            <input type="range" id="fo-slider-${c}" min="0" max="1" step="0.05" value="${d.winRate}">
+            <input type="number" id="fo-num-${c}" min="0" max="100" step="5" value="${Math.round(d.winRate * 100)}"><span>%</span>
+          </div>
+          <div class="edge" id="fo-edge-${c}"></div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" id="fo-apply-${c}">Apply</button>
+        </div>
+        <div class="active-state" id="fo-active-${c}"></div>
+      </div>`;
+  }
+
+  function bindFo(c) {
+    const d = draftFo[c];
+    const en = document.getElementById('fo-en-' + c);
+    const slider = document.getElementById('fo-slider-' + c);
+    const num = document.getElementById('fo-num-' + c);
+    const sync = () => {
+      const pctWin = Math.round(d.winRate * 100);
+      document.getElementById('fo-edge-' + c).innerHTML =
+        `Every new trade: <b>${pctWin}%</b> forced win, <b>${100 - pctWin}%</b> forced loss`;
+      slider.value = d.winRate; num.value = pctWin;
+      document.getElementById('fo-box-' + c).className = d.enabled ? '' : 'dim';
+      const a = state.forced.classes[c];
+      document.getElementById('fo-active-' + c).innerHTML = a.enabled
+        ? `Active: <b>${Math.round(a.winRate * 100)}% forced wins</b>`
+        : `Active: <b>Off</b> (natural outcomes)`;
+      document.getElementById('fo-apply-' + c).disabled =
+        d.enabled === a.enabled && (!d.enabled || d.winRate === a.winRate);
+    };
+    en.addEventListener('change', () => { d.enabled = en.checked; sync(); });
+    slider.addEventListener('input', () => { d.winRate = Number(slider.value); sync(); });
+    num.addEventListener('input', () => {
+      const v = Number(num.value);
+      if (Number.isFinite(v)) { d.winRate = Math.min(1, Math.max(0, v / 100)); sync(); }
+    });
+    document.getElementById('fo-apply-' + c).addEventListener('click', () => applyFo(c));
+    sync();
+  }
+
+  async function applyFo(c) {
+    try {
+      const d = draftFo[c];
+      const r = await api('/admin/debug/forced-outcome', {
+        method: 'PUT',
+        body: JSON.stringify({ scope: 'class', class: c, enabled: d.enabled, winRate: d.winRate }),
+      });
+      adopt(r.data); render();
+      toast(`${CLASS_META[c].title}: forced outcomes ${d.enabled ? 'on' : 'off'}`);
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  function accountRulesHtml() {
+    const f = state.forced;
+    const rows = f.accounts.length
+      ? f.accounts.map((a) => `
+          <div class="rule">
+            <div><code>${esc(a.userId)}</code> · ${esc(a.accountType === 'any' ? 'any account' : a.accountType + ' account')}
+              · <b style="color:#37D948">${Math.round(a.winRate * 100)}% wins</b></div>
+            <button class="btn btn-danger" data-remove="${esc(a.userId)}">Remove</button>
+          </div>`).join('')
+      : `<div class="desc" style="margin:0">No account rules. Add one below to target a single user.</div>`;
+    return `
+      <div class="table-card" style="margin-bottom:24px">
+        <h2>Specific accounts</h2>
+        <div class="desc">A rule for one user beats the group setting above. Safest way to test: target one demo account.</div>
+        <div class="form-row">
+          <input class="field grow" id="acctId" placeholder="User ID (UUID)" spellcheck="false">
+          <select class="field" id="acctType">
+            <option value="demo">Demo account only</option>
+            <option value="real">Real account only</option>
+            <option value="any">Both accounts</option>
+          </select>
+          <input class="field" id="acctRate" type="number" min="0" max="100" step="5" value="100" style="width:80px"><span>% wins</span>
+          <button class="btn btn-primary" id="acctAdd">Add / update</button>
+        </div>
+        ${rows}
+        <div class="stats">Forced results applied: <b>${f.stats.applied}</b> (of which flipped from the natural result: <b>${f.stats.flipped}</b>) · pending trades: <b>${f.stats.pending}</b></div>
+        <div class="actions" style="margin-top:12px"><button class="btn btn-danger" id="foResetAll">Clear all forced outcomes</button></div>
+      </div>`;
+  }
+
+  function bindAccountRules() {
+    document.getElementById('acctAdd').addEventListener('click', async () => {
+      try {
+        const userId = document.getElementById('acctId').value.trim();
+        const rate = Number(document.getElementById('acctRate').value);
+        if (!Number.isFinite(rate) || rate < 0 || rate > 100) throw new Error('Win % must be between 0 and 100.');
+        const r = await api('/admin/debug/forced-outcome', {
+          method: 'PUT',
+          body: JSON.stringify({
+            scope: 'account', userId,
+            accountType: document.getElementById('acctType').value,
+            winRate: rate / 100,
+          }),
+        });
+        adopt(r.data); render(); toast('Account rule saved');
+      } catch (e) { toast(e.message, 'error'); }
+    });
+    document.querySelectorAll('[data-remove]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        try {
+          const r = await api('/admin/debug/forced-outcome/account/' + encodeURIComponent(b.dataset.remove), { method: 'DELETE' });
+          adopt(r.data); render(); toast('Account rule removed');
+        } catch (e) { toast(e.message, 'error'); }
+      }));
+    document.getElementById('foResetAll').addEventListener('click', async () => {
+      if (!confirm('Turn off every forced-outcome rule (groups and accounts)?')) return;
+      try {
+        const r = await api('/admin/debug/forced-outcome/reset', { method: 'POST', body: '{}' });
+        adopt(r.data); render(); toast('All forced outcomes cleared');
+      } catch (e) { toast(e.message, 'error'); }
+    });
+  }
+
+  // Take a fresh server snapshot while keeping every draft in sync.
+  function adopt(data) {
+    state = data;
+    for (const k of ORDER) { draft[k] = { ...state.config[k] }; draftFo[k] = { ...state.forced.classes[k] }; }
+  }
+
+  function renderTable() {
+    const head = `<tr><th>Bet</th><th>Win p</th><th>Default</th>${
+      ORDER.map((c) => `<th>${esc(CLASS_META[c].title.replace(' accounts', ''))}</th>`).join('')}</tr>`;
+    const cell = (v, base) => {
+      const bad = v.rtp > 1.0001;
+      const changed = base && Math.abs(v.mult - base.mult) > 1e-9;
+      return `<td class="${bad ? 'bad' : changed ? 'changed' : ''}">${v.mult.toFixed(4)}×<span class="rtp">${pct(v.rtp)}</span></td>`;
+    };
+    const rows = state.preview.map((r) => `<tr>
+      <td>${esc(r.label)}</td><td>${(r.p * 100).toFixed(0)}%</td>
+      ${cell(r.default, null)}
+      ${ORDER.map((c) => cell(r.classes[c], r.default)).join('')}
+    </tr>`).join('');
+    document.getElementById('previewTable').innerHTML = head + rows;
+  }
+
+  async function apply(c) {
+    try {
+      const d = draft[c];
+      const body = { class: c, mode: d.mode };
+      if (d.mode === 'rtp') body.rtp = d.rtp;
+      const r = await api('/admin/debug/house-edge', { method: 'PUT', body: JSON.stringify(body) });
+      adopt(r.data);
+      render(); toast(`${CLASS_META[c].title}: applied`);
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  async function resetClass(c) {
+    if (!c && !confirm('Reset every account class to the default payout table?')) return;
+    try {
+      const r = await api('/admin/debug/house-edge/reset', { method: 'POST', body: JSON.stringify(c ? { class: c } : {}) });
+      adopt(r.data);
+      render(); toast(c ? `${CLASS_META[c].title}: reset` : 'All classes reset');
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  load();
+</script>
+</body>
+</html>
+
