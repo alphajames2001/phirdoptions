@@ -14,6 +14,13 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
+// Button colour pairs, spelled out so contrast never depends on variant defaults.
+// Primary: inverted fill (white on black in dark mode, black on white in light).
+// Outline: --input border (3:1+ against the page) and a tint-only hover, so the
+// label stays text-foreground in every state.
+const PRIMARY_CTA = "bg-primary text-primary-foreground hover:bg-primary/85";
+const OUTLINE_CTA = "border-input text-foreground hover:bg-foreground/10 hover:text-foreground";
+
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -191,10 +198,10 @@ function Landing() {
           </nav>
           <div className="flex items-center gap-2">
             <Link to="/login" className="hidden sm:inline-flex">
-              <Button variant="ghost" size="sm">Log in</Button>
+              <Button variant="ghost" size="sm" className="text-foreground">Log in</Button>
             </Link>
               <Link to="/signup">
-                <Button size="sm" className="text-background">Sign up</Button>
+                <Button size="sm" className={PRIMARY_CTA}>Sign up</Button>
               </Link>
           </div>
         </div>
@@ -218,12 +225,12 @@ function Landing() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link to="/signup">
-                <Button size="lg" className="text-background">
+                <Button size="lg" className={PRIMARY_CTA}>
                   Get started <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>
               <Link to="/signup">
-                <Button size="lg" variant="outline">Create free account</Button>
+                <Button size="lg" variant="outline" className={OUTLINE_CTA}>Create free account</Button>
               </Link>
             </div>
             <div className="mt-10 grid max-w-md grid-cols-3 gap-6 text-sm">
@@ -272,7 +279,7 @@ function Landing() {
                   </td>
                   <td className="hidden px-4 py-3 text-right md:table-cell">
                     <Link to="/signup">
-                      <Button size="sm" variant="outline" className="text-foreground">Trade</Button>
+                      <Button size="sm" variant="outline" className={OUTLINE_CTA}>Trade</Button>
                     </Link>
                   </td>
                 </tr>
@@ -342,7 +349,7 @@ function Landing() {
           </p>
           <div className="mt-8 flex justify-center gap-3">
             <Link to="/signup">
-              <Button size="lg">Create account</Button>
+              <Button size="lg" className={PRIMARY_CTA}>Create account</Button>
             </Link>
           </div>
         </div>
