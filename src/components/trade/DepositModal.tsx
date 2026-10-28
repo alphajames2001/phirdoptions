@@ -139,7 +139,7 @@ export function DepositModal({
             <Button 
               onClick={submitMpesa} 
               disabled={submitting} 
-              className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+              className="w-full"
             >
               {submitting ? "Awaiting confirmation…" : `Send STK Push (KES ${Math.round(Number(amount) * fxRate).toLocaleString()})`}
             </Button>
@@ -188,7 +188,7 @@ export function DepositModal({
             </div>
             <Button
               onClick={() => notAvailable("Bank")}
-              className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+              className="w-full"
             >
               Continue with bank transfer
             </Button>
@@ -220,7 +220,7 @@ export function DepositModal({
             </div>
             <Button
               onClick={() => notAvailable("PayPal")}
-              className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+              className="w-full"
             >
               Continue with PayPal
             </Button>

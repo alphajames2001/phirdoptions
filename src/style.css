@@ -52,87 +52,84 @@
 }
 
 :root {
-  /* Phird Options — light mode */
-  --radius: 0;
-  --background: #ffffff;
-  --foreground: #000000;
-  --surface: #f4f4f4;
-  --elevated: #f4f4f4;
-  --card: #f4f4f4;
-  --card-foreground: #000000;
+  /* Phird Options — light mode (purple tinted) */
+  --radius: 10px;
+  --background: #f7f5ff;
+  --foreground: #1a1625;
+  --surface: #f3f0ff;
+  --elevated: #ece7ff;
+  --card: #ffffff;
+  --card-foreground: #1a1625;
   --popover: #ffffff;
-  --popover-foreground: #000000;
-  --primary: #000000;
+  --popover-foreground: #1a1625;
+  --primary: #7C3AED;
   --primary-foreground: #ffffff;
   --secondary: transparent;
-  --secondary-foreground: #000000;
-  --muted: #f4f4f4;
-  --muted-foreground: #5c5c5c;
-  --accent: #f4f4f4;
-  --accent-foreground: #000000;
-  --destructive: #000000;
+  --secondary-foreground: #1a1625;
+  --muted: #ece7ff;
+  --muted-foreground: #6b648f;
+  --accent: #ece7ff;
+  --accent-foreground: #1a1625;
+  --destructive: #EF4444;
   --destructive-foreground: #ffffff;
-  --border: #d4d4d4;
-  /* --input is the border of interactive controls (outline buttons, fields).
-     #767676 on #fff = 4.5:1, so the control edge is actually visible. */
-  --input: #767676;
-  --ring: #000000;
-  --bull: #000000;
-  --bear: #000000;
-  --chart-1: #000000;
-  --chart-2: #5c5c5c;
-  --chart-3: #999999;
-  --chart-4: #d4d4d4;
-  --chart-5: #f4f4f4;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #000000;
-  --sidebar-primary: #000000;
+  --border: #d9d3ff;
+  --input: #b9b0ff;
+  --ring: #7C3AED;
+  --bull: #22C55E;
+  --bear: #EF4444;
+  --chart-1: #7C3AED;
+  --chart-2: #22C55E;
+  --chart-3: #EF4444;
+  --chart-4: #F59E0B;
+  --chart-5: #8B5CF6;
+  --sidebar: #f7f5ff;
+  --sidebar-foreground: #1a1625;
+  --sidebar-primary: #7C3AED;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f4f4f4;
-  --sidebar-accent-foreground: #000000;
-  --sidebar-border: #d4d4d4;
-  --sidebar-ring: #000000;
+  --sidebar-accent: #ece7ff;
+  --sidebar-accent-foreground: #1a1625;
+  --sidebar-border: #d9d3ff;
+  --sidebar-ring: #7C3AED;
 }
 
 .dark {
-  /* Phird Options — dark mode (default) */
-  --background: #000000;
-  --foreground: #ffffff;
-  --surface: #0d0d0d;
-  --elevated: #0d0d0d;
-  --card: #0d0d0d;
-  --card-foreground: #ffffff;
-  --popover: #000000;
-  --popover-foreground: #ffffff;
-  --primary: #ffffff;
-  --primary-foreground: #000000;
+  /* Phird Options — dark mode (purple indigo) */
+  --background: #0F0D22;
+  --foreground: #FFFFFF;
+  --surface: #16122E;
+  --elevated: #1D1840;
+  --card: #1D1840;
+  --card-foreground: #FFFFFF;
+  --popover: #16122E;
+  --popover-foreground: #FFFFFF;
+  --primary: #7C3AED;
+  --primary-foreground: #FFFFFF;
   --secondary: transparent;
-  --secondary-foreground: #ffffff;
-  --muted: #0d0d0d;
-  --muted-foreground: #999999;
-  --accent: #0d0d0d;
-  --accent-foreground: #ffffff;
-  --destructive: #ffffff;
-  --destructive-foreground: #000000;
-  --border: #2b2b2b;
-  /* #808080 on #000 = 5.3:1 */
-  --input: #808080;
-  --ring: #ffffff;
-  --bull: #ffffff;
-  --bear: #ffffff;
-  --chart-1: #ffffff;
-  --chart-2: #999999;
-  --chart-3: #5c5c5c;
-  --chart-4: #2b2b2b;
-  --chart-5: #0d0d0d;
-  --sidebar: #000000;
-  --sidebar-foreground: #ffffff;
-  --sidebar-primary: #ffffff;
-  --sidebar-primary-foreground: #000000;
-  --sidebar-accent: #0d0d0d;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #2b2b2b;
-  --sidebar-ring: #ffffff;
+  --secondary-foreground: #FFFFFF;
+  --muted: #1D1840;
+  --muted-foreground: #8E89AD;
+  --accent: #272052;
+  --accent-foreground: #FFFFFF;
+  --destructive: #EF4444;
+  --destructive-foreground: #FFFFFF;
+  --border: #2B2556;
+  --input: #2B2556;
+  --ring: #8B5CF6;
+  --bull: #22C55E;
+  --bear: #EF4444;
+  --chart-1: #8B5CF6;
+  --chart-2: #22C55E;
+  --chart-3: #EF4444;
+  --chart-4: #F59E0B;
+  --chart-5: #2DD4BF;
+  --sidebar: #16122E;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #7C3AED;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #272052;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #2B2556;
+  --sidebar-ring: #8B5CF6;
 }
 
 @layer base {

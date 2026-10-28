@@ -213,7 +213,7 @@ export function AutoTradeResultModal({ open, onOpenChange, result }: AutoTradeRe
               Back to Trade
             </Button>
             <Button 
-              className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+              className="flex-1"
               onClick={() => {
                 onOpenChange(false);
                 navigate({ to: '/wallet' });

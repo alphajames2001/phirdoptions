@@ -419,7 +419,7 @@ export function AIControls() {
         </div>
         <div className="flex items-center gap-2">
           <Button
-            variant={aiRunning ? "destructive" : "outline"}
+            variant={aiRunning ? "destructive" : "default"}
             size="sm"
             onClick={toggleAIRun}
             className="text-xs"

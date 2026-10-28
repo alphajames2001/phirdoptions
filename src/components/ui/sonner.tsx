@@ -25,34 +25,30 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       className="toaster group"
       theme={isDark ? "dark" : "light"}
-      // Sonner paints toasts from these variables, and its own selectors are
-      // more specific than Tailwind utilities, so bg-*/text-* classes alone
-      // can lose and leave a light toast with white text. Setting the
-      // variables is the reliable route.
       style={
         {
-          "--normal-bg": "var(--surface)",
+          "--normal-bg": "var(--card)",
           "--normal-text": "var(--foreground)",
           "--normal-border": "var(--border)",
-          "--success-bg": "var(--surface)",
+          "--success-bg": "var(--card)",
           "--success-text": "var(--foreground)",
           "--success-border": "var(--border)",
-          "--error-bg": "var(--surface)",
+          "--error-bg": "var(--card)",
           "--error-text": "var(--foreground)",
           "--error-border": "var(--border)",
-          "--warning-bg": "var(--surface)",
+          "--warning-bg": "var(--card)",
           "--warning-text": "var(--foreground)",
           "--warning-border": "var(--border)",
-          "--info-bg": "var(--surface)",
+          "--info-bg": "var(--card)",
           "--info-text": "var(--foreground)",
           "--info-border": "var(--border)",
         } as React.CSSProperties
       }
       toastOptions={{
         classNames: {
-          toast: "bg-surface! text-foreground! border-border! shadow-none!",
+          toast: "bg-card! text-foreground! border-border! shadow-lg!",
           description: "text-muted-foreground!",
-          actionButton: "bg-foreground! text-background!",
+          actionButton: "bg-primary! text-primary-foreground! hover:bg-primary/90!",
           cancelButton: "bg-transparent! text-foreground! border! border-input!",
           success: "text-foreground!",
           error: "text-foreground!",

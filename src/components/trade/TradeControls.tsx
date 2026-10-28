@@ -381,7 +381,7 @@ export function TradeControls() {
 
       <button
         onClick={buy}
-        className="w-full py-3 font-heading bg-foreground text-background [clip-path:polygon(10px_0,100%_0,100%_calc(100%-10px),calc(100%-10px)_100%,0_100%,0_10px)] hover:invert"
+        className="w-full py-3 font-heading rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 shadow-[0_0_0_0_rgba(124,58,237,0)] hover:shadow-[0_0_20px_rgba(124,58,237,0.25)] transition-all"
       >
         <div>Buy</div>
         <div className="text-xs font-medium">

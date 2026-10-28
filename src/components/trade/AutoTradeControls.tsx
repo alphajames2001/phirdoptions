@@ -528,7 +528,7 @@ export function AutoTradeControls() {
           {/* Start button */}
           <Button
             onClick={handleStart}
-            className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+            className="w-full"
             disabled={balance < getStakeNum() * 2 || !getStakeNum()}
           >
             <Play className="h-4 w-4 mr-2" />
