@@ -56,7 +56,7 @@ function Login() {
         await syncAll();
         
         toast.success("Welcome back!");
-        navigate({ to: "/dashboard" });
+        navigate({ to: "/trade" });
       } else {
         toast.error("Login failed: No user data returned");
       }

@@ -537,7 +537,9 @@ export function AutoTradeControls() {
 
           {balance < getStakeNum() * 2 && getStakeNum() > 0 && (
             <p className="text-center text-xs text-destructive">
-              Insufficient balance. Need at least {formatMoney(getStakeNum() * 2, currency, fxRate)} to start.
+            Insufficient balance. Need at least 
+{formatMoney(getStakeNum() * 2, currency, fxRate)} to start.
+            <button className="ml-1 underline" onClick={() => window.dispatchEvent(new CustomEvent('open-deposit'))}>Deposit</button>
             </p>
           )}
         </div>

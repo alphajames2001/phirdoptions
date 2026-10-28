@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, User } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
+import { ChevronDown, User, LayoutGrid, BarChart3, Wallet, Settings, Moon, Sun } from "lucide-react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useApp, formatMoney, type AccountKind, type Currency } from "@/lib/store";
 import {
   DropdownMenu,
@@ -15,9 +15,23 @@ import { DepositModal } from "@/components/trade/DepositModal";
 import GLogo from "@/components/layout/GLogo";
 import { toast } from "sonner";
 
+const topNavItems = [
+  { to: "/dashboard", icon: LayoutGrid, label: "Home" },
+  { to: "/trade", icon: BarChart3, label: "Trade" },
+  { to: "/wallet", icon: Wallet, label: "Wallet" },
+  { to: "/settings", icon: Settings, label: "Settings" },
+];
+
 export function TopBar() {
   const navigate = useNavigate();
+  const path = useRouterState({ select: (s) => s.location.pathname });
   const [depositOpen, setDepositOpen] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setDepositOpen(true);
+    window.addEventListener('open-deposit', handler as EventListener);
+    return () => window.removeEventListener('open-deposit', handler as EventListener);
+  }, []);
   
   const account = useApp((s) => s.account);
   const setAccount = useApp((s) => s.setAccount);
@@ -27,8 +41,18 @@ export function TopBar() {
   const fxRate = useApp((s) => s.fxRate);
   const isAuthenticated = useApp((s) => s.isAuthenticated);
   const logout = useApp((s) => s.logout);
+  const theme = useApp((s) => s.theme);
+  const setTheme = useApp((s) => s.setTheme);
 
   const balance = account === "demo" ? demoBalance : realBalance;
+
+  // "system" resolves to the OS preference so the icon always matches
+  // what ThemeManager is actually applying to <html>.
+  const isDark =
+    theme === "dark" ||
+    (theme === "system" &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   const handleAccountSwitch = (kind: AccountKind) => {
     if (kind === account) return;
@@ -49,10 +73,52 @@ export function TopBar() {
         <span className="hidden md:inline text-lg font-heading tracking-[-0.01em]">Phird Options</span>
       </div>
 
+      <nav className="hidden md:flex items-center gap-1 ml-4">
+        {topNavItems.map((n) => {
+          const active = path.startsWith(n.to);
+          return (
+            <Link
+              key={n.to}
+              to={n.to}
+              className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition ${
+                active
+                  ? "bg-elevated text-primary"
+                  : "text-muted-foreground hover:bg-elevated/60 hover:text-foreground"
+              }`}
+            >
+              <n.icon className="h-4 w-4" />
+              <span>{n.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
       <div className="ml-auto flex items-center gap-2">
-        <div className="hidden md:flex h-9 w-9 items-center justify-center border border-border text-muted-foreground">
-          <User className="h-4 w-4" />
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="hidden md:flex h-9 w-9 items-center justify-center border border-border text-muted-foreground hover:bg-surface hover:text-foreground">
+              <User className="h-4 w-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => navigate({ to: "/account" })}>
+              <User className="mr-2 h-4 w-4" /> Account
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate({ to: "/settings" })}>
+              <Settings className="mr-2 h-4 w-4" /> Settings
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <button
+          type="button"
+          onClick={() => setTheme(isDark ? "light" : "dark")}
+          className="flex h-9 w-9 items-center justify-center border border-border text-muted-foreground hover:bg-surface hover:text-foreground"
+          aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+          title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </button>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

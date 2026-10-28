@@ -62,7 +62,7 @@ function Signup() {
         await syncAll();
         
         toast.success("Account created — welcome to Phird Options!");
-        navigate({ to: "/dashboard" });
+        navigate({ to: "/trade" });
       } else if (data.user) {
         toast.info("Check your email for confirmation link!");
         navigate({ to: "/login" });

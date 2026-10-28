@@ -518,12 +518,16 @@ export class MarketWebSocket {
   private subscribedSymbols: Set<string> = new Set()
   private token: string | undefined
   private userId: string | null = null
+  private intentionalClose = false
 
   constructor(token?: string) {
     this.token = token
   }
 
   connect() {
+    // Never leave a previous socket attached when (re)connecting.
+    this.detachSocket()
+    this.intentionalClose = false
     let url = WS_URL
     if (this.token) {
       url = `${WS_URL}?token=${this.token}`
@@ -554,7 +558,7 @@ export class MarketWebSocket {
     this.ws.onclose = (event) => {
       console.log('[WS] Disconnected', event.code, event.reason)
       this.emit('disconnected', { disconnected: true, code: event.code })
-      if (event.code !== 1000) {
+      if (!this.intentionalClose && event.code !== 1000) {
         this.reconnect()
       }
     }
@@ -681,17 +685,31 @@ export class MarketWebSocket {
     }
   }
 
+  // Detach handlers and close the underlying socket in ANY state.
+  // The old code only closed OPEN sockets, so a socket that was still
+  // CONNECTING when disconnect() ran leaked: it finished connecting,
+  // kept emitting ticks / 'connected' / 'disconnected' into the store,
+  // and (closing abnormally) even kicked off its own reconnect loop.
+  private detachSocket() {
+    const sock = this.ws
+    if (!sock) return
+    sock.onopen = null
+    sock.onmessage = null
+    sock.onclose = null
+    sock.onerror = null
+    if (sock.readyState === WebSocket.OPEN || sock.readyState === WebSocket.CONNECTING) {
+      try { sock.close(1000, 'Disconnected by client') } catch {}
+    }
+    this.ws = null
+  }
+
   disconnect() {
+    this.intentionalClose = true
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
-    if (this.ws) {
-      if (this.ws.readyState === WebSocket.OPEN) {
-        this.ws.close(1000, 'Disconnected by client')
-      }
-      this.ws = null
-    }
+    this.detachSocket()
     this.subscribedSymbols.clear()
     console.log('[WS] Disconnected by client')
   }

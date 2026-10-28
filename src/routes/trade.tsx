@@ -9,12 +9,11 @@ import { ContractSelector } from "@/components/trade/ContractSelector";
 import { VolatilityIndicator } from "@/components/trade/VolatilityIndicator";
 import { TradeControls } from "@/components/trade/TradeControls";
 import { AutoTradeControls } from "@/components/trade/AutoTradeControls";
-import { AIControls } from "@/components/trade/AIControls";
 import { Positions } from "@/components/trade/Positions";
 import { AutoTradeResultModal } from "@/components/trade/AutoTradeResultModal";
 import { useApp, formatMoney } from "@/lib/store";
 import { useTickEngine } from "@/lib/tick-engine";
-import { Brain, Plus, Minus, Eye, EyeOff, ChevronDown } from "lucide-react";
+import { Plus, Minus, Eye, EyeOff, ChevronDown } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -49,7 +48,6 @@ function TradePage() {
   const fxRate = useApp((s) => s.fxRate);
   const totalPnl = trades.reduce((a, t) => a + (t.pnl ?? 0), 0);
   const autoTrade = useApp((s) => s.autoTrade);
-  const aiDecision = useApp((s) => s.autoTrade.aiDecision);
   
   const autoTradeResult = useApp((s) => s.autoTradeResult);
   const hideAutoTradeResult = useApp((s) => s.hideAutoTradeResult);
@@ -64,6 +62,14 @@ function TradePage() {
     <AuthGuard>
       <AppShell>
         <div className="flex h-full flex-col md:flex-row">
+          {/* Left positions sidebar */}
+          <aside className="hidden md:flex w-[320px] shrink-0 flex-col overflow-hidden border-r border-border bg-background">
+            <div className="border-b border-border px-3 py-2 text-sm font-semibold">Positions</div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              <Positions />
+            </div>
+          </aside>
+
           {/* Chart area */}
           <div className="flex min-h-0 flex-1 flex-col">
             {/* Top selectors */}
@@ -109,7 +115,7 @@ function TradePage() {
           </div>
 
           {/* Right side panel */}
-          <aside className="w-full md:w-[340px] shrink-0 overflow-y-auto border-t md:border-t-0 md:border-l border-border bg-background md:p-3 md:space-y-4">
+          <aside className="w-full md:w-[340px] shrink-0 overflow-y-auto border-t md:border-t-0 md:border-l border-border bg-background md:p-3">
             {/* Mobile collapsibles */}
             <div className="md:hidden">
               <Collapsible defaultOpen={false}>
@@ -118,78 +124,46 @@ function TradePage() {
                   <ChevronDown className="h-4 w-4 transition data-[state=open]:rotate-180" />
                 </CollapsibleTrigger>
                 <CollapsibleContent className="p-3">
-                  <Tabs defaultValue="manual" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3">
-                      <TabsTrigger value="manual">Manual</TabsTrigger>
+                  <Tabs defaultValue="auto" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
                       <TabsTrigger value="auto">
                         Auto
                         {autoTrade.isRunning && (
                           <span className="ml-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-primary" />
                         )}
                       </TabsTrigger>
-                      <TabsTrigger value="ai">
-                        <Brain className="h-3.5 w-3.5 mr-1" />
-                        AI
-                        {aiDecision && (
-                          <span className="ml-1.5 inline-block h-2 w-2 rounded-full bg-primary" />
-                        )}
-                      </TabsTrigger>
+                      <TabsTrigger value="manual">Manual</TabsTrigger>
                     </TabsList>
-                    <TabsContent value="manual" className="pt-3">
-                      <TradeControls />
-                    </TabsContent>
                     <TabsContent value="auto" className="pt-3">
                       <AutoTradeControls />
                     </TabsContent>
-                    <TabsContent value="ai" className="pt-3">
-                      <AIControls />
+                    <TabsContent value="manual" className="pt-3">
+                      <TradeControls />
                     </TabsContent>
                   </Tabs>
-                </CollapsibleContent>
-              </Collapsible>
-              <Collapsible defaultOpen={false}>
-                <CollapsibleTrigger className="flex w-full items-center justify-between border-b border-border px-3 py-2 text-sm font-semibold">
-                  Positions
-                  <ChevronDown className="h-4 w-4 transition data-[state=open]:rotate-180" />
-                </CollapsibleTrigger>
-                <CollapsibleContent className="p-3">
-                  <Positions />
                 </CollapsibleContent>
               </Collapsible>
             </div>
 
             {/* Desktop layout */}
             <div className="hidden md:block">
-              <Tabs defaultValue="manual" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="manual">Manual</TabsTrigger>
+              <Tabs defaultValue="auto" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="auto">
                     Auto
                     {autoTrade.isRunning && (
                       <span className="ml-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-primary" />
                     )}
                   </TabsTrigger>
-                  <TabsTrigger value="ai">
-                    <Brain className="h-3.5 w-3.5 mr-1" />
-                    AI
-                    {aiDecision && (
-                      <span className="ml-1.5 inline-block h-2 w-2 rounded-full bg-primary" />
-                    )}
-                  </TabsTrigger>
+                  <TabsTrigger value="manual">Manual</TabsTrigger>
                 </TabsList>
-                <TabsContent value="manual" className="pt-3">
-                  <TradeControls />
-                </TabsContent>
                 <TabsContent value="auto" className="pt-3">
                   <AutoTradeControls />
                 </TabsContent>
-                <TabsContent value="ai" className="pt-3">
-                  <AIControls />
+                <TabsContent value="manual" className="pt-3">
+                  <TradeControls />
                 </TabsContent>
               </Tabs>
-              <div className="mt-3 border-t border-border pt-3">
-                <Positions />
-              </div>
             </div>
           </aside>
         </div>

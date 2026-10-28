@@ -17,6 +17,21 @@ export interface ChartHandle {
   zoomOut: () => void;
 }
 
+/** Theme-dependent colours, shared by chart creation and live theme switches. */
+function getPalette(theme: string) {
+  const isDark =
+    theme === "dark" ||
+    (theme === "system" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches);
+  return {
+    fg: isDark ? "#ffffff" : "#000000",
+    grid: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
+    line: isDark ? "#ffffff" : "#000000",
+    top: isDark ? "rgba(255, 255, 255, 0.18)" : "rgba(0, 0, 0, 0.10)",
+    bottom: isDark ? "rgba(255, 255, 255, 0.02)" : "rgba(0, 0, 0, 0.01)",
+  };
+}
+
 export function PriceChart() {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -33,30 +48,33 @@ export function PriceChart() {
   const ws = useApp((s) => s.ws);
   const volatility = useApp((s) => s.volatility);
 
-  // ── Setup chart ──────────────────────────────────────────────────
+  // ── Setup chart (ONCE) ───────────────────────────────────────────
+  // This used to depend on [theme], so toggling light/dark destroyed the
+  // chart and rebuilt it with random seed data. isReady flipped
+  // true→false→true inside one commit (net: unchanged), so the history
+  // and entry-line effects never re-ran. The chart was left showing fake
+  // random data (the "spike") until a volatility change forced a reset.
+  // Colours are now applied in place by the theme effect below, so the
+  // chart, its data and its entry lines survive a theme switch.
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const isDarkTheme =
-      theme === "dark" ||
-      (theme === "system" &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches);
-    const fg = isDarkTheme ? "#ffffff" : "#000000";
-    const grid = isDarkTheme ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
+    const state = useApp.getState();
+    const p = getPalette(state.theme);
 
     const chart = createChart(containerRef.current, {
       layout: {
         background: { color: "transparent" },
-        textColor: fg,
+        textColor: p.fg,
         attributionLogo: false,
       },
-      grid: { vertLines: { color: grid }, horzLines: { color: grid } },
+      grid: { vertLines: { color: p.grid }, horzLines: { color: p.grid } },
       rightPriceScale: { 
-        borderColor: grid, 
+        borderColor: p.grid, 
         scaleMargins: { top: 0.1, bottom: 0.1 } 
       },
       timeScale: {
-        borderColor: grid,
+        borderColor: p.grid,
         timeVisible: true,
         secondsVisible: true,
         rightOffset: 8,
@@ -82,7 +100,7 @@ export function PriceChart() {
           }),
       },
       crosshair: {
-        mode: crosshairEnabled ? CrosshairMode.Normal : CrosshairMode.Hidden,
+        mode: state.crosshairEnabled ? CrosshairMode.Normal : CrosshairMode.Hidden,
       },
       handleScale: {
         mouseWheel: false,
@@ -92,17 +110,13 @@ export function PriceChart() {
       autoSize: true,
     });
 
-    const chartLineColor = isDarkTheme ? "#ffffff" : "#000000";
-    const chartLineTop = isDarkTheme ? "rgba(255, 255, 255, 0.18)" : "rgba(0, 0, 0, 0.10)";
-    const chartLineBottom = isDarkTheme ? "rgba(255, 255, 255, 0.02)" : "rgba(0, 0, 0, 0.01)";
-
     const series = chart.addSeries(AreaSeries, {
-      lineColor: chartLineColor,
-      topColor: chartLineTop,
-      bottomColor: chartLineBottom,
+      lineColor: p.line,
+      topColor: p.top,
+      bottomColor: p.bottom,
       lineWidth: 1,
       priceLineVisible: true,
-      priceLineColor: chartLineColor,
+      priceLineColor: p.line,
       priceLineWidth: 1,
       priceLineStyle: LineStyle.Dashed,
       lastValueVisible: true,
@@ -114,10 +128,10 @@ export function PriceChart() {
     // Generate seed data as fallback
     const now = Math.floor(Date.now() / 1000);
     const seed: { time: UTCTimestamp; value: number }[] = [];
-    let p = useApp.getState().price;
+    let price0 = state.price;
     for (let i = 120; i > 0; i--) {
-      p += (Math.random() - 0.5) * 0.4;
-      seed.push({ time: (now - i) as UTCTimestamp, value: Number(p.toFixed(3)) });
+      price0 += (Math.random() - 0.5) * 0.4;
+      seed.push({ time: (now - i) as UTCTimestamp, value: Number(price0.toFixed(3)) });
     }
     series.setData(seed);
 
@@ -151,7 +165,37 @@ export function PriceChart() {
       seriesRef.current = null;
       setIsReady(false);
     };
-  }, [theme]);
+  }, []);
+
+  // ── Theme switch: recolour in place, keep data ──────────────────
+  useEffect(() => {
+    const apply = () => {
+      const chart = chartRef.current;
+      const series = seriesRef.current;
+      if (!chart || !series) return;
+      const p = getPalette(theme);
+      chart.applyOptions({
+        layout: { textColor: p.fg },
+        grid: { vertLines: { color: p.grid }, horzLines: { color: p.grid } },
+        rightPriceScale: { borderColor: p.grid },
+        timeScale: { borderColor: p.grid },
+      });
+      series.applyOptions({
+        lineColor: p.line,
+        topColor: p.top,
+        bottomColor: p.bottom,
+        priceLineColor: p.line,
+      });
+    };
+    apply();
+
+    // "system" follows the OS live (ThemeManager does the same for <html>).
+    if (theme === "system") {
+      const mq = window.matchMedia("(prefers-color-scheme: dark)");
+      mq.addEventListener("change", apply);
+      return () => mq.removeEventListener("change", apply);
+    }
+  }, [theme, isReady]);
 
   // ── Crosshair toggle ─────────────────────────────────────────────
   useEffect(() => {

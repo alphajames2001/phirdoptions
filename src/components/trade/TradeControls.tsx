@@ -152,6 +152,7 @@ export function TradeControls() {
     }
     if (stakeNum > balance) {
       toast.error("Insufficient balance");
+      window.dispatchEvent(new CustomEvent('open-deposit'));
       return;
     }
 

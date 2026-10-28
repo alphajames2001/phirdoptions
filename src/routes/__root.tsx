@@ -15,7 +15,6 @@ import { Toaster } from "@/components/ui/sonner";
 import { DemoBadge } from "@/components/layout/DemoBadge";
 import { useApp } from "@/lib/store";
 import { getToken } from "@/lib/api";
-import { useTickEngine } from "@/lib/tick-engine";
 
 function NotFoundComponent() {
   return (
@@ -95,43 +94,39 @@ function RootComponent() {
   const syncAll = useApp((s) => s.syncAll);
   const connectWebSocket = useApp((s) => s.connectWebSocket);
   const disconnectWebSocket = useApp((s) => s.disconnectWebSocket);
-  const volatility = useApp((s) => s.volatility);
 
-  // ✅ FIX: this hook was defined but never called anywhere in the app.
-  // It runs the settlement watchdog (force-settles trades past their
-  // expiry via REST, independent of any WebSocket push) and the
-  // synthetic price fallback used when the WebSocket is disconnected.
-  // Without this call, trade closing depended entirely on a
-  // contract_settled WS push arriving — if that was ever missed, the
-  // trade stayed "open" in the UI indefinitely.
-  useTickEngine();
+  // NOTE: useTickEngine() is intentionally NOT called here. trade.tsx
+  // already calls it. Calling it in both places ran two settlement
+  // watchdogs and two synthetic-price loops at once, fighting over the
+  // same price/trade state.
 
+  // 1) Restore the session from a saved token. Only fetches data; it no
+  //    longer opens the WebSocket itself.
   useEffect(() => {
     const initApp = async () => {
-      const token = getToken();
-      if (token) {
-        try {
-          await fetchUserData();
-          await syncAll();
-          connectWebSocket();
-        } catch (err) {
-          console.error('Failed to initialize app:', err);
-        }
+      if (!getToken()) return;
+      try {
+        await fetchUserData();
+        await syncAll();
+      } catch (err) {
+        console.error('Failed to initialize app:', err);
       }
     };
-    
     initApp();
+  }, []);
 
+  // 2) Single owner of the WebSocket lifecycle. It used to be opened from
+  //    initApp AND from an effect that re-ran on every volatility change,
+  //    so connections were constantly torn down and raced each other.
+  //    Symbol switches are handled by the store's setVolatility()
+  //    (unsubscribe/subscribe on the live socket), so no reconnect needed.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    connectWebSocket();
     return () => {
       disconnectWebSocket();
     };
-  }, []);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      connectWebSocket();
-    }
-  }, [isAuthenticated, volatility]);
+  }, [isAuthenticated]);
 
   return (
     <QueryClientProvider client={queryClient}>

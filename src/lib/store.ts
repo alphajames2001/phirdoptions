@@ -984,10 +984,19 @@ export const useApp = create<AppState>((set, get) => {
         wsInstance = null;
       }
 
+      // Mark as down until THIS instance actually connects. Otherwise a
+      // stale isConnected=true makes the tick engine think a live feed
+      // exists and it never starts the synthetic fallback.
+      set({ isConnected: false });
+
       const token = getToken();
-      wsInstance = new MarketWebSocket(token || undefined);
+      const instance = new MarketWebSocket(token || undefined);
+      wsInstance = instance;
+      // Ignore events from any instance that has since been replaced.
+      const isCurrent = () => wsInstance === instance;
       
-      wsInstance.on('tick', (data) => {
+      instance.on('tick', (data) => {
+        if (!isCurrent()) return;
         if (data.price && data.symbol === get().volatility) {
           set((s) => ({
             price: data.price,
@@ -997,7 +1006,8 @@ export const useApp = create<AppState>((set, get) => {
         }
       });
       
-     wsInstance.on('contract_settled', (data) => {
+     instance.on('contract_settled', (data) => {
+  if (!isCurrent()) return;
   console.log('[WS] Contract settled:', data);
 
   // ✅ Update the specific trade immediately using this payload, for
@@ -1033,7 +1043,8 @@ export const useApp = create<AppState>((set, get) => {
   }
 });
 
-      wsInstance.on('transaction_updated', (data) => {
+      instance.on('transaction_updated', (data) => {
+        if (!isCurrent()) return;
         console.log('[WS] Transaction updated:', data);
         get().fetchBalances();
         if (data.status === 'completed') {
@@ -1051,21 +1062,23 @@ export const useApp = create<AppState>((set, get) => {
         }
       });
       
-      wsInstance.connect();
+      instance.connect();
       
-      wsInstance.on('connected', () => {
+      instance.on('connected', () => {
+        if (!isCurrent()) return;
         set({ isConnected: true });
         const symbol = get().volatility;
-        wsInstance?.subscribe(symbol);
+        instance.subscribe(symbol);
         console.log(`[Store] WebSocket connected, subscribed to ${symbol}`);
       });
       
-      wsInstance.on('disconnected', () => {
+      instance.on('disconnected', () => {
+        if (!isCurrent()) return;
         set({ isConnected: false });
         console.log('[Store] WebSocket disconnected');
       });
       
-      set({ ws: wsInstance });
+      set({ ws: instance });
     },
 
     disconnectWebSocket: () => {
