@@ -152,6 +152,32 @@
     text-rendering: optimizeLegibility;
   }
 
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-border);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-primary);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
   button:focus-visible,
   a:focus-visible,
   input:focus-visible,
