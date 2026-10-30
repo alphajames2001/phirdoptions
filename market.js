@@ -71,17 +71,17 @@ function nextPrice(currentPrice, sigma) {
 // ── Payout Calculation ────────────────────────────────────────────
 
 const PAYOUT_MULTIPLIERS = {
-  rise_fall: 1.88,
-  over_under: 1.88,
-  even_odd: 1.96,
+  rise_fall: 4.00,
+  over_under: 4.00,
+  even_odd: 5.56,
   match_differ: 8.00,
 }
 
   // Edge cases for Over/Under (barrier 0 + over, barrier 9 + under)
-const OVER_UNDER_EDGE_MULTIPLIER = 1.19
+const OVER_UNDER_EDGE_MULTIPLIER = 2.25
 
 // Match/Differ: 'differ' wins ~90% of time - same discounted rate as edges
-const MATCH_DIFFER_DIFFER_MULTIPLIER = 1.19
+const MATCH_DIFFER_DIFFER_MULTIPLIER = 2.25
 
 // accountClass ('demo' | 'influencer' | 'real') only matters in DEBUG_MODE;
 // otherwise houseEdge.getMultiplier() returns null and nothing changes.
