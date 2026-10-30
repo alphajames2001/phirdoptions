@@ -67,13 +67,13 @@ function DigitStatsInner({ prices, decimals, windowSize = 1000, digitFrom = "int
   }, [prices, decimals, windowSize, digitFrom]);
 
   return (
-    <div className="border-t border-border bg-background px-2 py-2">
-      <div className="mb-1 flex items-center justify-between px-1 text-[11px] text-muted-foreground">
+    <div className="border-t border-border bg-background px-2 py-1.5">
+      <div className="mb-0.5 flex items-center justify-between px-1 text-[10px] text-muted-foreground">
         <span>Last digit</span>
         <span>{total >= windowSize ? `Last ${windowSize} ticks` : `${total} ticks`}</span>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1 md:justify-center">
+      <div className="flex gap-1.5 overflow-x-auto pb-0.5 md:justify-center">
         {pcts.map((pct, d) => {
           const isMax = d === max;
           const isMin = d === min;
@@ -91,7 +91,7 @@ function DigitStatsInner({ prices, decimals, windowSize = 1000, digitFrom = "int
 
           return (
             <div key={d} className="flex shrink-0 flex-col items-center">
-              <div className="relative h-12 w-12">
+              <div className="relative h-10 w-10">
                 <svg viewBox="0 0 48 48" className="h-full w-full -rotate-90">
                   <circle
                     cx="24"
@@ -113,16 +113,16 @@ function DigitStatsInner({ prices, decimals, windowSize = 1000, digitFrom = "int
                   />
                 </svg>
                 <div className="absolute inset-0 grid place-items-center leading-none">
-                  <span className="text-sm font-bold">{d}</span>
+                  <span className="text-xs font-bold">{d}</span>
                 </div>
               </div>
-              <span className={`mt-0.5 text-[10px] tabular-nums ${pctClass}`}>
+              <span className={`text-[9px] tabular-nums ${pctClass}`}>
                 {total ? `${pct.toFixed(1)}%` : "--"}
               </span>
               {/* Marker under the digit of the latest tick */}
               <span
                 aria-hidden
-                className={`mt-0.5 h-0 w-0 border-x-4 border-b-[6px] border-x-transparent ${
+                className={`h-0 w-0 border-x-3 border-b-[5px] border-x-transparent ${
                   current === d ? "border-b-primary" : "border-b-transparent"
                 }`}
               />

@@ -13,7 +13,8 @@ import { Positions } from "@/components/trade/Positions";
 import { AutoTradeResultModal } from "@/components/trade/AutoTradeResultModal";
 import { useApp, formatMoney } from "@/lib/store";
 import { useTickEngine } from "@/lib/tick-engine";
-import { Plus, Minus, Eye, EyeOff, ChevronDown } from "lucide-react";
+import { Plus, Minus, Eye, EyeOff, ChevronDown, Spline, Activity } from "lucide-react";
+import { useChartMode, toggleChartMode } from "@/lib/chartMode";
 import {
   Collapsible,
   CollapsibleContent,
@@ -43,6 +44,7 @@ function TradePage() {
   const now = useClock();
   const crosshair = useApp((s) => s.crosshairEnabled);
   const toggleCrosshair = useApp((s) => s.toggleCrosshair);
+  const chartMode = useChartMode();
   const trades = useApp((s) => s.trades);
   const currency = useApp((s) => s.currency);
   const fxRate = useApp((s) => s.fxRate);
@@ -51,6 +53,13 @@ function TradePage() {
   
   const autoTradeResult = useApp((s) => s.autoTradeResult);
   const hideAutoTradeResult = useApp((s) => s.hideAutoTradeResult);
+  const [tradeTab, setTradeTab] = useState("auto");
+
+  useEffect(() => {
+    const handler = () => setTradeTab("auto");
+    window.addEventListener("gwave:focus-auto-tab", handler);
+    return () => window.removeEventListener("gwave:focus-auto-tab", handler);
+  }, []);
 
   // Rolling real-tick history for the last-digit stats (see store.ts).
   const tickHistory = useApp((s) => s.tickHistory);
@@ -63,7 +72,7 @@ function TradePage() {
       <AppShell>
         <div className="flex h-full flex-col md:flex-row">
           {/* Left positions sidebar */}
-          <aside className="hidden md:flex w-[320px] shrink-0 flex-col overflow-hidden border-r border-border bg-background">
+          <aside className="hidden md:flex w-[240px] shrink-0 flex-col overflow-hidden border-r border-border bg-background">
             <div className="border-b border-border px-3 py-2 text-sm font-semibold">Positions</div>
             <div className="min-h-0 flex-1 overflow-y-auto p-2">
               <Positions />
@@ -83,7 +92,7 @@ function TradePage() {
             <div className="relative min-h-0 flex-1">
               <PriceChart />
               {/* Zoom + crosshair controls */}
-              <div className="absolute bottom-3 left-3 flex flex-col gap-1 rounded-md bg-card/80 p-1 backdrop-blur">
+              <div className="pointer-events-auto absolute bottom-3 left-3 z-20 flex flex-col gap-1 rounded-md bg-card/80 p-1 backdrop-blur">
                 <button onClick={() => zoom("in")} className="grid h-7 w-7 place-items-center rounded hover:bg-accent" aria-label="Zoom in">
                   <Plus className="h-4 w-4" />
                 </button>
@@ -92,6 +101,14 @@ function TradePage() {
                 </button>
                 <button onClick={() => zoom("out")} className="grid h-7 w-7 place-items-center rounded hover:bg-accent" aria-label="Zoom out">
                   <Minus className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={toggleChartMode}
+                  className="grid h-7 w-7 place-items-center rounded hover:bg-accent"
+                  aria-label="Toggle smooth chart"
+                  title={chartMode === "smooth" ? "Smooth (click for tick speed)" : "Tick speed (click for smooth)"}
+                >
+                  {chartMode === "smooth" ? <Spline className="h-4 w-4" /> : <Activity className="h-4 w-4 text-muted-foreground" />}
                 </button>
               </div>
             </div>
@@ -115,7 +132,7 @@ function TradePage() {
           </div>
 
           {/* Right side panel */}
-          <aside className="w-full md:w-[340px] shrink-0 overflow-y-auto border-t md:border-t-0 md:border-l border-border bg-background md:p-3">
+          <aside className="w-full md:w-[260px] shrink-0 overflow-y-auto border-t md:border-t-0 md:border-l border-border bg-background md:p-3">
             {/* Mobile collapsibles */}
             <div className="md:hidden">
               <Collapsible defaultOpen={false}>
@@ -124,7 +141,7 @@ function TradePage() {
                   <ChevronDown className="h-4 w-4 transition data-[state=open]:rotate-180" />
                 </CollapsibleTrigger>
                 <CollapsibleContent className="p-3">
-                  <Tabs defaultValue="auto" className="w-full">
+                  <Tabs value={tradeTab} onValueChange={setTradeTab} className="w-full">
                     <TabsList className="grid w-full grid-cols-2">
                       <TabsTrigger value="auto">
                         Auto
@@ -147,7 +164,7 @@ function TradePage() {
 
             {/* Desktop layout */}
             <div className="hidden md:block">
-              <Tabs defaultValue="auto" className="w-full">
+              <Tabs value={tradeTab} onValueChange={setTradeTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="auto">
                     Auto

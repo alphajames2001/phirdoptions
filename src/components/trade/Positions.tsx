@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useApp, formatMoney } from "@/lib/store";
+import { useApp, formatMoney, VOLATILITIES } from "@/lib/store";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 function Countdown({ expiresAt }: { expiresAt: number }) {
@@ -37,13 +37,16 @@ export function Positions() {
         {open.length === 0 && <div className="px-1 py-4 text-center text-xs text-muted-foreground">No open positions</div>}
         {open.map((t) => {
           const livePnl = t.direction === "rise" ? price - t.entryPrice : t.direction === "fall" ? t.entryPrice - price : 0;
+          const marketName = VOLATILITIES.find((v) => v.id === t.volatility)?.name ?? t.volatility;
           return (
             <div key={t.id} className="rounded-md bg-card p-3 text-sm">
               <div className="flex justify-between">
                 <div className="font-semibold capitalize">{t.direction}</div>
                 <Countdown expiresAt={t.expiresAt} />
               </div>
-              <div className="text-xs text-muted-foreground">Volatility Index</div>
+              <div className="truncate text-xs text-muted-foreground" title={marketName}>
+                {marketName}
+              </div>
               <div className="mt-1 flex justify-between">
                 <span>{formatMoney(t.stake, currency, fxRate)}</span>
                 <span className={livePnl >= 0 ? "text-primary" : "text-destructive"}>
@@ -57,20 +60,26 @@ export function Positions() {
       </TabsContent>
       <TabsContent value="closed" className="space-y-2 pt-2">
         {closed.length === 0 && <div className="px-1 py-4 text-center text-xs text-muted-foreground">No closed positions yet</div>}
-        {closed.map((t) => (
-          <div key={t.id} className="rounded-md bg-card p-3 text-sm">
-            <div className="flex justify-between">
-              <div className="font-semibold capitalize">{t.direction}</div>
-              <span className={(t.pnl ?? 0) >= 0 ? "text-primary" : "text-destructive"}>
-                {(t.pnl ?? 0) >= 0 ? "+" : ""}
-                {formatMoney(t.pnl ?? 0, currency, fxRate)}
-              </span>
+        {closed.map((t) => {
+          const marketName = VOLATILITIES.find((v) => v.id === t.volatility)?.name ?? t.volatility;
+          return (
+            <div key={t.id} className="rounded-md bg-card p-3 text-sm">
+              <div className="flex justify-between">
+                <div className="font-semibold capitalize">{t.direction}</div>
+                <span className={(t.pnl ?? 0) >= 0 ? "text-primary" : "text-destructive"}>
+                  {(t.pnl ?? 0) >= 0 ? "+" : ""}
+                  {formatMoney(t.pnl ?? 0, currency, fxRate)}
+                </span>
+              </div>
+              <div className="truncate text-xs text-muted-foreground" title={marketName}>
+                {marketName}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Stake {formatMoney(t.stake, currency, fxRate)} A� {t.status}
+              </div>
             </div>
-            <div className="text-xs text-muted-foreground">
-              Stake {formatMoney(t.stake, currency, fxRate)} · {t.status}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </TabsContent>
     </Tabs>
   );

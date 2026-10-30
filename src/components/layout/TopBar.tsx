@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, User, LayoutGrid, BarChart3, Wallet, Settings, Moon, Sun } from "lucide-react";
+import { ChevronDown, User, LayoutGrid, BarChart3, Wallet, Settings, Moon, Sun, Brain } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useApp, formatMoney, type AccountKind, type Currency } from "@/lib/store";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { DepositModal } from "@/components/trade/DepositModal";
+import { EntryScannerModal } from "@/components/trade/EntryScannerModal";
 import GLogo from "@/components/layout/GLogo";
 import { toast } from "sonner";
 
@@ -26,6 +27,7 @@ export function TopBar() {
   const navigate = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [depositOpen, setDepositOpen] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   useEffect(() => {
     const handler = () => setDepositOpen(true);
@@ -93,7 +95,27 @@ export function TopBar() {
         })}
       </nav>
 
+      <button
+        type="button"
+        onClick={() => setScannerOpen(true)}
+        className="hidden md:flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-elevated/60 hover:text-foreground"
+        title="AI Entry Scanner"
+      >
+        <Brain className="h-4 w-4" />
+        <span>AI</span>
+      </button>
+
       <div className="ml-auto flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setScannerOpen(true)}
+          className="flex md:hidden h-9 w-9 items-center justify-center border border-border text-primary hover:bg-surface"
+          aria-label="Open AI Entry Scanner"
+          title="AI Entry Scanner"
+        >
+          <Brain className="h-4 w-4" />
+        </button>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="hidden md:flex h-9 w-9 items-center justify-center border border-border text-muted-foreground hover:bg-surface hover:text-foreground">
@@ -184,6 +206,7 @@ export function TopBar() {
         )}
       </div>
       <DepositModal open={depositOpen} onOpenChange={setDepositOpen} />
+      <EntryScannerModal open={scannerOpen} onOpenChange={setScannerOpen} />
     </header>
   );
 }

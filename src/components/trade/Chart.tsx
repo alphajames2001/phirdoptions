@@ -6,16 +6,28 @@ import {
   type IChartApi,
   type ISeriesApi,
   type IPriceLine,
+  type ISeriesPrimitive,
+  type IPrimitivePaneView,
+  type IPrimitivePaneRenderer,
+  type SeriesAttachedParameter,
+  type Time,
   type UTCTimestamp,
   LineStyle,
+  LineType,
   CrosshairMode,
 } from "lightweight-charts";
 import { useApp } from "@/lib/store";
+import { useChartMode, type ChartMode } from "@/lib/chartMode";
 
 export interface ChartHandle {
   zoomIn: () => void;
   zoomOut: () => void;
 }
+
+/** Empty bars kept to the right of the latest tick (the "breathing room"). */
+const RIGHT_OFFSET = 12;
+/** Smooth mode: how long the newest point takes to glide to its new value. */
+const SMOOTH_MS = 380;
 
 /** Theme-dependent colours, shared by chart creation and live theme switches. */
 function getPalette(theme: string) {
@@ -32,11 +44,83 @@ function getPalette(theme: string) {
   };
 }
 
+/**
+ * Draws a dot on the latest tick plus a horizontal line from that dot to the
+ * right edge of the pane (where the price-axis label sits). The built-in price
+ * line spans the full width, so we replace it with this primitive.
+ */
+class LastTickPrimitive implements ISeriesPrimitive<Time> {
+  private chart: IChartApi | null = null;
+  private series: ISeriesApi<"Area"> | null = null;
+  private point: { time: number; value: number } | null = null;
+  private x: number | null = null;
+  private y: number | null = null;
+  private color = "#ffffff";
+
+  private view: IPrimitivePaneView = {
+    zOrder: () => "top",
+    renderer: (): IPrimitivePaneRenderer => ({
+      draw: (target: any) => {
+        target.useBitmapCoordinateSpace((scope: any) => {
+          if (this.x === null || this.y === null) return;
+          const { context: ctx, bitmapSize, horizontalPixelRatio: hr, verticalPixelRatio: vr } = scope;
+          const x = Math.round(this.x * hr);
+          const y = Math.round(this.y * vr);
+          if (x > bitmapSize.width) return;
+
+          ctx.save();
+          ctx.strokeStyle = this.color;
+          ctx.fillStyle = this.color;
+          ctx.lineWidth = Math.max(1, Math.round(hr));
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(bitmapSize.width, y);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(x, y, 4 * hr, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        });
+      },
+    }),
+  };
+
+  attached(p: SeriesAttachedParameter<Time>) {
+    this.chart = p.chart as IChartApi;
+    this.series = p.series as ISeriesApi<"Area">;
+  }
+  detached() {
+    this.chart = null;
+    this.series = null;
+  }
+  setPoint(time: number, value: number) {
+    this.point = { time, value };
+  }
+  setColor(c: string) {
+    this.color = c;
+  }
+  updateAllViews() {
+    if (!this.chart || !this.series || !this.point) {
+      this.x = this.y = null;
+      return;
+    }
+    this.x = this.chart.timeScale().timeToCoordinate(this.point.time as UTCTimestamp);
+    this.y = this.series.priceToCoordinate(this.point.value);
+  }
+  paneViews() {
+    return [this.view];
+  }
+}
+
 export function PriceChart() {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Area"> | null>(null);
+  const primitiveRef = useRef<LastTickPrimitive | null>(null);
   const lastTimeRef = useRef<number>(0);
+  const lastValueRef = useRef<number | null>(null);
+  const dataLenRef = useRef<number>(0);
+  const animRef = useRef<number | null>(null);
   const entryLinesRef = useRef<Map<string, IPriceLine>>(new Map());
   const hasReceivedHistoryRef = useRef<boolean>(false);
   const [isReady, setIsReady] = useState(false);
@@ -47,14 +131,51 @@ export function PriceChart() {
   const trades = useApp((s) => s.trades);
   const ws = useApp((s) => s.ws);
   const volatility = useApp((s) => s.volatility);
+  const mode = useChartMode();
+
+  // Mode is read inside effects that must not re-run when it changes.
+  const modeRef = useRef<ChartMode>(mode);
+  modeRef.current = mode;
+
+  // ── Helpers ──────────────────────────────────────────────────────
+  const cancelAnim = () => {
+    if (animRef.current !== null) {
+      cancelAnimationFrame(animRef.current);
+      animRef.current = null;
+    }
+  };
+
+  /** Single place that writes the newest point to series + overlay. */
+  const pushPoint = (time: number, value: number) => {
+    lastValueRef.current = value;
+    primitiveRef.current?.setPoint(time, value);
+    seriesRef.current?.update({ time: time as UTCTimestamp, value });
+  };
+
+  /** Records a full dataset (seed/history) so overlay + fit stay in sync. */
+  const afterSetData = (data: { time: UTCTimestamp; value: number }[]) => {
+    cancelAnim();
+    dataLenRef.current = data.length;
+    const last = data[data.length - 1];
+    if (last) {
+      lastValueRef.current = last.value;
+      primitiveRef.current?.setPoint(last.time as number, last.value);
+    }
+  };
+
+  /**
+   * First tick at the left edge, latest tick with RIGHT_OFFSET bars of space on
+   * the right. (fitContent() ignores rightOffset, so we set the range ourselves.)
+   */
+  const fitToData = () => {
+    const ts = chartRef.current?.timeScale();
+    const n = dataLenRef.current;
+    if (!ts || n < 1) return;
+    ts.setVisibleLogicalRange({ from: 0, to: n - 1 + RIGHT_OFFSET });
+  };
 
   // ── Setup chart (ONCE) ───────────────────────────────────────────
-  // This used to depend on [theme], so toggling light/dark destroyed the
-  // chart and rebuilt it with random seed data. isReady flipped
-  // true→false→true inside one commit (net: unchanged), so the history
-  // and entry-line effects never re-ran. The chart was left showing fake
-  // random data (the "spike") until a volatility change forced a reset.
-  // Colours are now applied in place by the theme effect below, so the
+  // Colours are applied in place by the theme effect below, so the
   // chart, its data and its entry lines survive a theme switch.
   useEffect(() => {
     if (!containerRef.current) return;
@@ -69,24 +190,25 @@ export function PriceChart() {
         attributionLogo: false,
       },
       grid: { vertLines: { color: p.grid }, horzLines: { color: p.grid } },
-      rightPriceScale: { 
-        borderColor: p.grid, 
-        scaleMargins: { top: 0.1, bottom: 0.1 } 
+      rightPriceScale: {
+        borderColor: p.grid,
+        scaleMargins: { top: 0.1, bottom: 0.1 },
       },
       timeScale: {
         borderColor: p.grid,
         timeVisible: true,
         secondsVisible: true,
-        rightOffset: 8,
+        rightOffset: RIGHT_OFFSET,
         shiftVisibleRangeOnNewBar: true,
-        fixRightEdge: true,
+        fixRightEdge: true, // can't scroll past the live edge (+ rightOffset)
+        fixLeftEdge: true, // can't scroll past the first loaded history tick
         tickMarkFormatter: (time: number) => {
           const d = new Date((time as number) * 1000);
-          return d.toLocaleTimeString([], { 
-            hour: "2-digit", 
-            minute: "2-digit", 
-            second: "2-digit", 
-            hour12: false 
+          return d.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
           });
         },
       },
@@ -115,15 +237,23 @@ export function PriceChart() {
       topColor: p.top,
       bottomColor: p.bottom,
       lineWidth: 1,
-      priceLineVisible: true,
-      priceLineColor: p.line,
-      priceLineWidth: 1,
-      priceLineStyle: LineStyle.Dashed,
+      lineType: modeRef.current === "smooth" ? LineType.Curved : LineType.Simple,
+      // Built-in price line spans the full width; our primitive draws the
+      // dot + line from the latest tick instead. The axis label stays.
+      priceLineVisible: false,
       lastValueVisible: true,
       crosshairMarkerVisible: true,
     });
 
     chart.priceScale("right").applyOptions({ visible: true });
+
+    const primitive = new LastTickPrimitive();
+    primitive.setColor(p.line);
+    series.attachPrimitive(primitive);
+    primitiveRef.current = primitive;
+
+    chartRef.current = chart;
+    seriesRef.current = series;
 
     // Generate seed data as fallback
     const now = Math.floor(Date.now() / 1000);
@@ -134,16 +264,15 @@ export function PriceChart() {
       seed.push({ time: (now - i) as UTCTimestamp, value: Number(price0.toFixed(3)) });
     }
     series.setData(seed);
+    afterSetData(seed);
 
-    chartRef.current = chart;
-    seriesRef.current = series;
     lastTimeRef.current = now - 1;
     hasReceivedHistoryRef.current = false;
     setIsReady(true);
 
-    chart.timeScale().fitContent();
+    fitToData();
 
-    // Right-anchored wheel zoom
+    // Right-anchored wheel zoom (left end is clamped by fixLeftEdge)
     const el = containerRef.current;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -153,18 +282,21 @@ export function PriceChart() {
       const span = range.to - range.from;
       const factor = e.deltaY > 0 ? 1.15 : 0.87;
       const newSpan = Math.max(10, span * factor);
-      ts.setVisibleLogicalRange({ from: range.to - newSpan, to: range.to });
+      ts.setVisibleLogicalRange({ from: Math.max(0, range.to - newSpan), to: range.to });
     };
     el.addEventListener("wheel", onWheel, { passive: false });
 
     return () => {
+      cancelAnim();
       el.removeEventListener("wheel", onWheel);
       entryLinesRef.current.clear();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      primitiveRef.current = null;
       setIsReady(false);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Theme switch: recolour in place, keep data ──────────────────
@@ -184,8 +316,8 @@ export function PriceChart() {
         lineColor: p.line,
         topColor: p.top,
         bottomColor: p.bottom,
-        priceLineColor: p.line,
       });
+      primitiveRef.current?.setColor(p.line);
     };
     apply();
 
@@ -197,11 +329,20 @@ export function PriceChart() {
     }
   }, [theme, isReady]);
 
+  // ── Tick / smooth mode: curve type ──────────────────────────────
+  useEffect(() => {
+    if (!isReady) return;
+    if (mode === "tick") cancelAnim();
+    seriesRef.current?.applyOptions({
+      lineType: mode === "smooth" ? LineType.Curved : LineType.Simple,
+    });
+  }, [mode, isReady]);
+
   // ── Crosshair toggle ─────────────────────────────────────────────
   useEffect(() => {
     chartRef.current?.applyOptions({
-      crosshair: { 
-        mode: crosshairEnabled ? CrosshairMode.Normal : CrosshairMode.Hidden 
+      crosshair: {
+        mode: crosshairEnabled ? CrosshairMode.Normal : CrosshairMode.Hidden,
       },
     });
   }, [crosshairEnabled]);
@@ -209,14 +350,15 @@ export function PriceChart() {
   // ── Reset chart state on volatility change ──────────────────────
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return;
-    
-    console.log('[Chart] Volatility changed to:', volatility, '- Resetting chart');
-    
+
+    console.log("[Chart] Volatility changed to:", volatility, "- Resetting chart");
+
+    cancelAnim();
     seriesRef.current.setData([]);
     hasReceivedHistoryRef.current = false;
     lastTimeRef.current = Math.floor(Date.now() / 1000) - 1;
-    
-    for (const [id, line] of entryLinesRef.current) {
+
+    for (const [, line] of entryLinesRef.current) {
       try {
         seriesRef.current.removePriceLine(line);
       } catch {
@@ -224,9 +366,7 @@ export function PriceChart() {
       }
     }
     entryLinesRef.current.clear();
-    
-    chartRef.current.timeScale().fitContent();
-    
+
     const now = Math.floor(Date.now() / 1000);
     const seed: { time: UTCTimestamp; value: number }[] = [];
     let p = useApp.getState().price;
@@ -235,9 +375,11 @@ export function PriceChart() {
       seed.push({ time: (now - i) as UTCTimestamp, value: Number(p.toFixed(3)) });
     }
     seriesRef.current.setData(seed);
-    chartRef.current.timeScale().fitContent();
-    
-    console.log('[Chart] Chart reset complete for', volatility);
+    afterSetData(seed);
+    fitToData();
+
+    console.log("[Chart] Chart reset complete for", volatility);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [volatility]);
 
   // ── Listen for WebSocket history data ────────────────────────────
@@ -246,50 +388,72 @@ export function PriceChart() {
 
     const handleHistory = (data: any) => {
       if (data.symbol !== volatility) {
-        console.log('[Chart] Ignoring history for', data.symbol, '(current:', volatility, ')');
+        console.log("[Chart] Ignoring history for", data.symbol, "(current:", volatility, ")");
         return;
       }
-      
-      console.log('[Chart] Received history data:', data.ticks?.length || 0, 'ticks for', data.symbol);
-      
+
+      console.log("[Chart] Received history data:", data.ticks?.length || 0, "ticks for", data.symbol);
+
       if (data.ticks && data.ticks.length > 0) {
         const chartData = data.ticks.map((tick: any) => ({
           time: Math.floor(tick.timestamp / 1000) as UTCTimestamp,
           value: tick.price,
         }));
-        
+
         seriesRef.current?.setData(chartData);
+        afterSetData(chartData);
         lastTimeRef.current = chartData[chartData.length - 1].time as number;
-        chartRef.current?.timeScale().fitContent();
+        // First history tick is now index 0 -> fixLeftEdge stops dragging there.
+        fitToData();
         hasReceivedHistoryRef.current = true;
-        console.log('[Chart] Loaded history data:', chartData.length, 'points for', data.symbol);
+        console.log("[Chart] Loaded history data:", chartData.length, "points for", data.symbol);
       }
     };
 
-    ws.on('history', handleHistory);
+    ws.on("history", handleHistory);
 
-    // ✅ NEW: force a fresh history push now that our listener is guaranteed to
-    // be attached. `ws.subscribe()` is idempotent server-side (the backend just
-    // re-adds this socket to a Set and re-sends history + latest tick), so this
-    // is safe to call even if the store's own `connected` handler already
-    // subscribed earlier. This closes the startup race where that earlier
-    // subscribe's `history` response could arrive before this effect ever ran.
+    // Force a fresh history push now that our listener is guaranteed to be
+    // attached (subscribe is idempotent server-side; closes the startup race).
     ws.subscribe(volatility);
 
     return () => {
-      ws.off('history', handleHistory);
+      ws.off("history", handleHistory);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ws, volatility, isReady]);
 
-  // ── Always forward live price changes to chart ──────────────────
+  // ── Forward live price changes to chart ─────────────────────────
   useEffect(() => {
     if (!seriesRef.current || !isReady) return;
-    
+
     const t = Math.floor(Date.now() / 1000) as UTCTimestamp;
-    const nextTime = Math.max(lastTimeRef.current + 1, t) as UTCTimestamp;
+    const nextTime = Math.max(lastTimeRef.current + 1, t) as number;
     lastTimeRef.current = nextTime;
-    seriesRef.current.update({ time: nextTime, value: price });
-    
+    dataLenRef.current += 1;
+
+    cancelAnim();
+
+    const from = lastValueRef.current ?? price;
+
+    // Tick mode (or nothing to animate): write the raw tick straight away.
+    if (modeRef.current === "tick" || from === price) {
+      pushPoint(nextTime, price);
+      return;
+    }
+
+    // Smooth mode: the new point starts at the previous value and glides to
+    // the new price, so the line "grows" into each tick instead of snapping.
+    const start = performance.now();
+    const step = (now: number) => {
+      const k = Math.min(1, (now - start) / SMOOTH_MS);
+      const eased = 1 - Math.pow(1 - k, 3); // ease-out cubic
+      pushPoint(nextTime, from + (price - from) * eased);
+      animRef.current = k < 1 ? requestAnimationFrame(step) : null;
+    };
+    step(start);
+
+    return cancelAnim;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [price, isReady]);
 
   // ── Entry markers - filter by volatility ─────────────────────────
@@ -337,17 +501,18 @@ export function PriceChart() {
       const detail = (e as CustomEvent).detail as "in" | "out" | "fit";
       const ts = chartRef.current?.timeScale();
       if (!ts) return;
-      if (detail === "fit") return ts.fitContent();
+      if (detail === "fit") return fitToData();
       const range = ts.getVisibleLogicalRange();
       if (!range) return;
       const span = range.to - range.from;
       const factor = detail === "in" ? 0.7 : 1.4;
       const newSpan = span * factor;
-      ts.setVisibleLogicalRange({ from: range.to - newSpan, to: range.to });
+      ts.setVisibleLogicalRange({ from: Math.max(0, range.to - newSpan), to: range.to });
     };
     window.addEventListener("gwave:zoom", onZoom as EventListener);
     return () => window.removeEventListener("gwave:zoom", onZoom as EventListener);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <div ref={containerRef} className="absolute inset-0" />;
+  return <div ref={containerRef} className="absolute inset-0 z-0" />;
 }

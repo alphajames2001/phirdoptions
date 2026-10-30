@@ -1,5 +1,5 @@
 // src/components/trade/TradeControls.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useApp,
   NEGATIVE_DIRECTIONS,
@@ -9,7 +9,7 @@ import {
   type Direction,
   type DurationUnit,
 } from "@/lib/store";
-import { placeTrade, getPayoutPreview } from "@/lib/api";
+import { placeTrade } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Minus, Plus } from "lucide-react";
@@ -70,56 +70,31 @@ export function TradeControls() {
   const balance = account === "demo" ? demoBalance : realBalance;
 
   const dirs = directionOptions(contract);
-  const [direction, setDirection] = useState<Direction>(dirs[0].id);
-  const [unit, setUnit] = useState<DurationUnit>(contract === "match_differ" ? "ticks" : "seconds");
+  const allowedUnits: DurationUnit[] =
+    contract === "match_differ" || contract === "even_odd" || contract === "over_under"
+      ? ["ticks"]
+      : ["ticks", "seconds", "minutes", "hours"];
+
+  const [unit, setUnit] = useState<DurationUnit>(
+    contract === "match_differ" || contract === "even_odd" || contract === "over_under"
+      ? "ticks"
+      : "seconds",
+  );
   // ✅ Allow empty string for duration
   const [durationVal, setDurationVal] = useState<number | string>(10);
   // ✅ Allow empty string for stake
   const [stake, setStake] = useState<number | string>(5);
   const [barrier, setBarrier] = useState<number>(0);
-  const [payout, setPayout] = useState<number>(0);
-  const [payoutLoading, setPayoutLoading] = useState<boolean>(false);
+  const [placing, setPlacing] = useState<boolean>(false);
 
-  useMemo(() => {
-    if (!dirs.some((d) => d.id === direction)) setDirection(dirs[0].id);
-  }, [contract]);
-
-  const isNegative = NEGATIVE_DIRECTIONS.includes(direction);
-
-  // Instant client-side estimate
   useEffect(() => {
-    const digit = (contract === 'over_under' || contract === 'match_differ') ? barrier : undefined;
-    // ✅ Only calculate if stake is valid
-    const stakeNum = typeof stake === 'string' ? Number(stake) : stake;
-    if (stakeNum && stakeNum > 0) {
-      setPayout(estimatePayout(contract, stakeNum, direction, digit));
-    } else {
-      setPayout(0);
+    if (!allowedUnits.includes(unit)) {
+      const next = allowedUnits[0];
+      setUnit(next);
+      setDurationVal(UNIT_MIN[next]);
     }
-  }, [contract, stake, direction, barrier]);
-
-  // Debounced authoritative fetch
-  useEffect(() => {
-    let cancelled = false;
-    setPayoutLoading(true);
-    const t = setTimeout(async () => {
-      try {
-        const digit = (contract === 'over_under' || contract === 'match_differ') ? barrier : undefined;
-        const stakeNum = typeof stake === 'string' ? Number(stake) : stake;
-        if (!stakeNum || stakeNum < 2) {
-          setPayoutLoading(false);
-          return;
-        }
-        const res = await getPayoutPreview(contract, stakeNum, direction, digit);
-        if (!cancelled && res.success) setPayout(res.data.potentialPayout);
-      } catch {
-        // keep the last known (estimated) payout on a transient error
-      } finally {
-        if (!cancelled) setPayoutLoading(false);
-      }
-    }, 150);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [contract, stake, direction, barrier]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contract]);
 
   // Get numeric values for calculations
   const getDurationNum = (): number => {
@@ -132,7 +107,9 @@ export function TradeControls() {
     return typeof stake === 'string' ? Number(stake) : stake;
   };
 
-  const buy = async () => {
+  const buy = async (dir: Direction) => {
+    if (placing) return;
+
     // ✅ Validate duration
     const durationNum = getDurationNum();
     if (!durationNum || durationNum < UNIT_MIN[unit]) {
@@ -156,6 +133,7 @@ export function TradeControls() {
       return;
     }
 
+    setPlacing(true);
     try {
       const durationTicks = durationNum * (unit === 'ticks' ? 1 : unit === 'seconds' ? 1 : unit === 'minutes' ? 60 : 3600);
       const cappedDurationTicks = Math.min(durationTicks, 3600);
@@ -164,7 +142,7 @@ export function TradeControls() {
         accountType: account,
         symbol: volatility,
         contractType: contract,
-        direction,
+        direction: dir,
         selectedDigit: contract === 'over_under' || contract === 'match_differ' ? barrier : undefined,
         stake: stakeNum,
         durationTicks: cappedDurationTicks,
@@ -174,7 +152,7 @@ export function TradeControls() {
         openTrade(
           {
             contract,
-            direction,
+            direction: dir,
             volatility,
             stake: stakeNum,
             payout: response.data.potentialPayout,
@@ -185,7 +163,7 @@ export function TradeControls() {
           response.data.contractId,
         );
 
-        toast.success(`Opened ${direction.toUpperCase()} for $${stakeNum.toFixed(2)}`, {
+        toast.success(`Opened ${dir.toUpperCase()} for $${stakeNum.toFixed(2)}`, {
           description: `Trade #${response.data.contractId.slice(0, 6)} · settles in ${durationNum} ${unit}`,
         });
 
@@ -193,63 +171,40 @@ export function TradeControls() {
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to place trade");
+    } finally {
+      setPlacing(false);
     }
   };
 
-  const allowedUnits: DurationUnit[] =
-    contract === "match_differ" || contract === "even_odd" || contract === "over_under"
-      ? ["ticks"]
-      : ["ticks", "seconds", "minutes", "hours"];
-
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2 rounded-md bg-card p-2">
-        {dirs.map((d) => {
-          const active = d.id === direction;
-          const neg = NEGATIVE_DIRECTIONS.includes(d.id);
-          return (
-            <button
-              key={d.id}
-              onClick={() => setDirection(d.id)}
-              className={`rounded-md py-3 text-lg font-bold transition border-2 ${
-                active
-                  ? neg
-                    ? "border-destructive text-destructive"
-                    : "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {d.label}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="rounded-md bg-card p-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-semibold">Duration</div>
-            <select
-              value={unit}
-              onChange={(e) => {
-                const u = e.target.value as DurationUnit;
-                setUnit(u);
-                const currentVal = getDurationNum();
-                if (currentVal) {
-                  setDurationVal(Math.min(UNIT_MAX[u], Math.max(UNIT_MIN[u], currentVal)));
-                } else {
-                  setDurationVal(UNIT_MIN[u]);
-                }
-              }}
-              className="bg-transparent text-xs text-muted-foreground capitalize outline-none"
-            >
-              {allowedUnits.map((u) => (
-                <option key={u} value={u}>
-                  {u}
-                </option>
-              ))}
-            </select>
-          </div>
+      <div className="space-y-2 rounded-md bg-card p-3">
+        <div className="text-sm font-semibold">Duration</div>
+        <div>
+          <div className="mb-1 text-[10px] text-muted-foreground">Unit</div>
+          <select
+            value={unit}
+            onChange={(e) => {
+              const u = e.target.value as DurationUnit;
+              setUnit(u);
+              const currentVal = getDurationNum();
+              if (currentVal) {
+                setDurationVal(Math.min(UNIT_MAX[u], Math.max(UNIT_MIN[u], currentVal)));
+              } else {
+                setDurationVal(UNIT_MIN[u]);
+              }
+            }}
+            className="w-full rounded border border-input bg-background px-2 py-1.5 text-xs capitalize outline-none"
+          >
+            {allowedUnits.map((u) => (
+              <option key={u} value={u}>
+                {u}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <div className="mb-1 text-[10px] text-muted-foreground">Value</div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
@@ -257,7 +212,7 @@ export function TradeControls() {
                 const newVal = currentVal ? Math.max(UNIT_MIN[unit], currentVal - 1) : UNIT_MIN[unit];
                 setDurationVal(newVal);
               }}
-              className="grid h-7 w-7 place-items-center rounded bg-elevated hover:bg-accent"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded bg-elevated hover:bg-accent"
             >
               <Minus className="h-4 w-4" />
             </button>
@@ -277,7 +232,7 @@ export function TradeControls() {
                   setDurationVal(Math.min(UNIT_MAX[unit], Math.max(UNIT_MIN[unit], n)));
                 }
               }}
-              className="w-16 bg-transparent text-center text-2xl font-bold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              className="w-full flex-1 bg-transparent text-center text-xl font-bold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
             <button
               onClick={() => {
@@ -285,13 +240,13 @@ export function TradeControls() {
                 const newVal = currentVal ? Math.min(UNIT_MAX[unit], currentVal + 1) : UNIT_MIN[unit];
                 setDurationVal(newVal);
               }}
-              className="grid h-7 w-7 place-items-center rounded bg-elevated hover:bg-accent"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded bg-elevated hover:bg-accent"
             >
               <Plus className="h-4 w-4" />
             </button>
           </div>
         </div>
-        <div className="mt-1 text-[10px] text-muted-foreground">
+        <div className="text-[10px] text-muted-foreground">
           Min {UNIT_MIN[unit]} · Max {UNIT_MAX[unit]} {unit}
         </div>
       </div>
@@ -380,15 +335,36 @@ export function TradeControls() {
         </div>
       )}
 
-      <button
-        onClick={buy}
-        className="w-full py-3 font-heading rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 shadow-[0_0_0_0_rgba(124,58,237,0)] hover:shadow-[0_0_20px_rgba(124,58,237,0.25)] transition-all"
-      >
-        <div>Buy</div>
-        <div className="text-xs font-medium">
-          Potential Payout: {formatMoney(payout, currency, fxRate)}
+      <div className="sticky bottom-0 z-20 rounded-t-lg border-t border-border bg-background/95 pb-1 pt-2 backdrop-blur">
+        <div className="flex flex-col gap-2">
+          {dirs.map((d) => {
+            const neg = NEGATIVE_DIRECTIONS.includes(d.id);
+            const stakeNum = getStakeNum();
+            const digit = contract === "over_under" || contract === "match_differ" ? barrier : undefined;
+            const estimate = stakeNum > 0 ? estimatePayout(contract, stakeNum, d.id, digit) : 0;
+            return (
+              <button
+                key={d.id}
+                onClick={() => buy(d.id)}
+                disabled={placing}
+                className={`w-full rounded-lg py-3 font-heading font-bold text-white transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
+                  neg
+                    ? "bg-destructive hover:bg-destructive/90"
+                    : "bg-primary hover:bg-primary/90"
+                }`}
+              >
+                <div className="text-lg">{d.label}</div>
+                <div className="text-xs font-medium text-white/90">
+                  Payout: {formatMoney(estimate, currency, fxRate)}
+                </div>
+              </button>
+            );
+          })}
         </div>
-      </button>
+        {placing && (
+          <div className="mt-1 text-center text-xs text-muted-foreground">Placing trade…</div>
+        )}
+      </div>
     </div>
   );
 }

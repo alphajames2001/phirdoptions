@@ -182,6 +182,18 @@ export interface AutoTradeResult {
   takeProfit?: number;
 }
 
+/** Inputs produced by the AI entry scanner and loaded into the Auto tab. */
+export interface AutoSetup {
+  contract: ContractType;
+  volatility: VolatilityId;
+  direction: Direction;
+  barrier?: number;
+  label?: string;
+  stake?: number;
+  stopLoss?: number;
+  takeProfit?: number;
+}
+
 interface AppState {
   theme: Theme;
   setTheme: (t: Theme) => void;
@@ -231,6 +243,9 @@ interface AppState {
   };
   showAutoTradeResult: (result: AutoTradeResult) => void;
   hideAutoTradeResult: () => void;
+  pendingAutoSetup: (AutoSetup & { id: number }) | null;
+  applyAutoSetup: (setup: AutoSetup) => void;
+  clearPendingAutoSetup: () => void;
   fetchUserData: () => Promise<void>;
   fetchBalances: () => Promise<void>;
   fetchExchangeRate: () => Promise<void>;
@@ -542,6 +557,21 @@ export const useApp = create<AppState>((set, get) => {
 
     hideAutoTradeResult: () => {
       set({ autoTradeResult: { show: false, result: null } });
+    },
+
+    pendingAutoSetup: null,
+
+    applyAutoSetup: (setup) => {
+      set({ pendingAutoSetup: { ...setup, id: Date.now() + Math.random() } });
+      get().setVolatility(setup.volatility);
+      get().setContract(setup.contract);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("gwave:focus-auto-tab"));
+      }
+    },
+
+    clearPendingAutoSetup: () => {
+      set({ pendingAutoSetup: null });
     },
 
     startAutoTrade: (config) => {
