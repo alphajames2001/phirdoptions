@@ -6,6 +6,7 @@ const express = require('express')
 const cors = require('cors')
 const morgan = require('morgan')
 const { WebSocketServer } = require('ws')
+const { createClient } = require('@supabase/supabase-js')
 
 const db = require('./database')
 const mw = require('./middleware')
@@ -131,6 +132,10 @@ app.post('/admin/login', async (req, res) => {
       success: true,
       data: {
         token: data.session.access_token,
+        // Only influencers get a refresh token. It lets their device stay
+        // signed in until they log out manually. Admin sessions stay
+        // short-lived on purpose.
+        ...(role === 'influencer' ? { refreshToken: data.session.refresh_token } : {}),
         user: {
           id: data.user.id,
           email: data.user.email,
@@ -148,6 +153,63 @@ app.post('/admin/login', async (req, res) => {
     });
   }
 });
+
+// ── Influencer session refresh ────────────────────────────────────
+// Trades a refresh token for a fresh access token so influencers stay
+// signed in until they log out. Uses a throwaway client per call: the
+// shared mw.supabaseAuth client keeps session state in memory, and
+// refreshing on it would mix up different users' sessions.
+// Supabase rotates refresh tokens, so the response carries a new one
+// that replaces the old.
+app.post('/admin/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body || {}
+    if (!refreshToken || typeof refreshToken !== 'string' || refreshToken.length > 512) {
+      return res.status(400).json({ success: false, error: 'Refresh token required.', code: 'VALIDATION_ERROR' })
+    }
+
+    const client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    })
+    const { data, error } = await client.auth.refreshSession({ refresh_token: refreshToken })
+
+    if (error || !data?.session || !data?.user) {
+      return res.status(401).json({ success: false, error: 'Session expired. Please log in again.', code: 'TOKEN_EXPIRED' })
+    }
+
+    // Re-check the role on every refresh so a demoted or removed
+    // influencer can't stay signed in indefinitely.
+    const role = await mw.resolveRole(data.user.id)
+    if (role !== 'influencer') {
+      return res.status(403).json({ success: false, error: 'Access denied.', code: 'FORBIDDEN' })
+    }
+
+    res.json({
+      success: true,
+      data: {
+        token: data.session.access_token,
+        refreshToken: data.session.refresh_token,
+        user: { id: data.user.id, email: data.user.email, role },
+      },
+    })
+  } catch (err) {
+    console.error('[Admin Refresh] Error:', err)
+    res.status(500).json({ success: false, error: 'Refresh failed.', code: 'SERVER_ERROR' })
+  }
+})
+
+// ── Logout: revoke the session on Supabase ────────────────────────
+// Best effort and deliberately unauthenticated: the access token may
+// already have expired by the time the user taps logout, and the client
+// clears its own storage regardless. Supabase only acts on a valid JWT.
+app.post('/admin/logout', async (req, res) => {
+  const h = req.headers.authorization || ''
+  const token = h.startsWith('Bearer ') ? h.slice(7) : null
+  if (token) {
+    try { await db.supabase.auth.admin.signOut(token, 'local') } catch (_) { /* ignore */ }
+  }
+  res.json({ success: true })
+})
 
 // ── Auth routes ────────────────────────────────────────────────────
 

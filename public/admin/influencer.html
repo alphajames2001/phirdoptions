@@ -839,29 +839,117 @@
         const API_URL = window.location.origin;
         let exchangeRate = 130;
 
+        // ── Persistent session storage ────────────────────────────────
+        // localStorage survives closing the browser or the Android WebView
+        // (the app must enable DOM storage). Falls back to sessionStorage
+        // if localStorage is unavailable.
+        const K = {
+            token: 'gwave_admin_token',
+            refresh: 'gwave_admin_refresh',
+            user: 'gwave_admin_user',
+            name: 'gwave_admin_display_name',
+        };
+        const store = {
+            get(k){
+                try { const v = localStorage.getItem(k); if (v !== null) return v; } catch (e) {}
+                try { return sessionStorage.getItem(k); } catch (e) { return null; }
+            },
+            set(k, v){
+                try { localStorage.setItem(k, v); return; } catch (e) {}
+                try { sessionStorage.setItem(k, v); } catch (e) {}
+            },
+            remove(k){
+                try { localStorage.removeItem(k); } catch (e) {}
+                try { sessionStorage.removeItem(k); } catch (e) {}
+            },
+        };
+        // Move values written by the login page into persistent storage.
+        [K.token, K.user, K.name].forEach(k => {
+            try {
+                const v = sessionStorage.getItem(k);
+                if (v !== null && localStorage.getItem(k) === null) localStorage.setItem(k, v);
+            } catch (e) {}
+        });
+
+        function clearSession(){
+            Object.values(K).forEach(store.remove);
+        }
+
+        function tokenExpiresSoon(token, skewSec){
+            try {
+                const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+                const payload = JSON.parse(atob(b64));
+                return payload.exp * 1000 - Date.now() < (skewSec || 60) * 1000;
+            } catch (e) { return true; }
+        }
+
+        // One refresh at a time: Supabase rotates refresh tokens, so two
+        // parallel refreshes with the same token can invalidate the session.
+        let refreshing = null;
+        function refreshSession(){
+            if (refreshing) return refreshing;
+            const rt = store.get(K.refresh);
+            if (!rt) return Promise.resolve(false);
+            refreshing = (async () => {
+                try {
+                    const res = await fetch(`${API_URL}/admin/refresh`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ refreshToken: rt }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (res.ok && data.success) {
+                        store.set(K.token, data.data.token);
+                        store.set(K.refresh, data.data.refreshToken);
+                        return true;
+                    }
+                    // Definitively rejected (expired, revoked, role removed): sign out.
+                    if (res.status === 401 || res.status === 403) clearSession();
+                    return false;
+                } catch (e) {
+                    // Offline or server unreachable: keep the session and retry later.
+                    return false;
+                } finally {
+                    refreshing = null;
+                }
+            })();
+            return refreshing;
+        }
+
         function getToken(){
             const params = new URLSearchParams(window.location.search);
             const urlToken = params.get('token');
             if (urlToken) {
-                sessionStorage.setItem('gwave_admin_token', urlToken);
+                store.set(K.token, urlToken);
                 window.history.replaceState({}, document.title, window.location.pathname);
             }
-            return sessionStorage.getItem('gwave_admin_token') || '';
+            return store.get(K.token) || '';
         }
 
-        async function apiFetch(endpoint){
-            const token = sessionStorage.getItem('gwave_admin_token');
-            const headers = {};
+        async function apiFetch(endpoint, options, retried){
+            options = options || {};
+
+            // Refresh up front if the access token is missing or about to expire.
+            let token = store.get(K.token);
+            if ((!token || tokenExpiresSoon(token)) && store.get(K.refresh)) {
+                await refreshSession();
+                token = store.get(K.token);
+            }
+
+            const headers = Object.assign({}, options.headers || {});
+            if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
             if (token) headers['Authorization'] = `Bearer ${token}`;
 
-            const res = await fetch(`${API_URL}${endpoint}`, { headers });
+            const res = await fetch(`${API_URL}${endpoint}`, Object.assign({}, options, { headers }));
             const data = await res.json();
 
             if (!res.ok) {
                 if (res.status === 401) {
-                    sessionStorage.removeItem('gwave_admin_token');
-                    sessionStorage.removeItem('gwave_admin_user');
-                    sessionStorage.removeItem('gwave_admin_display_name');
+                    // Token rejected: try once with a refreshed one before giving up.
+                    if (!retried && store.get(K.refresh) && await refreshSession()) {
+                        return apiFetch(endpoint, options, true);
+                    }
+                    clearSession();
                     window.location.href = '/admin/login.html';
                 }
                 throw new Error(data.error || 'Request failed.');
@@ -897,12 +985,12 @@
             try {
                 const res = await apiFetch('/auth/profile');
                 if (res.success && res.data) {
-                    sessionStorage.setItem('gwave_admin_display_name', res.data.displayName);
+                    store.set(K.name, res.data.displayName);
                     applyGreetingAndInitials(res.data.displayName);
                 }
             } catch (err) {
                 console.warn('[Profile] Failed to load profile:', err.message);
-                const user = JSON.parse(sessionStorage.getItem('gwave_admin_user') || 'null');
+                const user = JSON.parse(store.get(K.user) || 'null');
                 if (user && user.displayName) {
                     applyGreetingAndInitials(user.displayName);
                 } else if (user && user.email) {
@@ -918,7 +1006,7 @@
             const greetEl = document.querySelector('.greeting-text p');
             if (greetEl) greetEl.textContent = greetWord;
 
-            const name = displayName || sessionStorage.getItem('gwave_admin_display_name') || 'User';
+            const name = displayName || store.get(K.name) || 'User';
             
             const { firstName, initials } = getDisplayNameAndInitials(name);
             document.getElementById('fname').textContent = firstName + ' 👋';
@@ -965,7 +1053,12 @@
         }
 
         (async function init(){
-            const token = getToken();
+            let token = getToken();
+            // Reopened after the access token was lost or expired: sign back in silently.
+            if (!token && store.get(K.refresh)) {
+                await refreshSession();
+                token = store.get(K.token);
+            }
             if (!token) {
                 window.location.href = '/admin/login.html';
                 return;
@@ -1008,11 +1101,29 @@
             }, 30000);
         })();
 
+        // Coming back to the app after it sat in the background: timers are
+        // throttled there, so refresh the session and data right away.
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState !== 'visible') return;
+            const t = store.get(K.token);
+            if (!t) return;
+            if (tokenExpiresSoon(t) && store.get(K.refresh)) await refreshSession();
+            fetchExchangeRate().then(loadBalance);
+        });
+
+        // The only way to end an influencer session.
         window.handleInfluencerLogout = function(){
             if (confirm('Are you sure you want to logout?')) {
-                sessionStorage.removeItem('gwave_admin_token');
-                sessionStorage.removeItem('gwave_admin_user');
-                sessionStorage.removeItem('gwave_admin_display_name');
+                const token = store.get(K.token);
+                clearSession();
+                // Revoke on the server too; keepalive lets it finish during navigation.
+                try {
+                    fetch(`${API_URL}/admin/logout`, {
+                        method: 'POST',
+                        headers: token ? { Authorization: `Bearer ${token}` } : {},
+                        keepalive: true,
+                    });
+                } catch (e) {}
                 window.location.href = '/admin/login.html';
             }
         };
