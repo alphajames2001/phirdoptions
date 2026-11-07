@@ -10,12 +10,15 @@ const db = require('./database')
 const SENDER_NAME = 'PALPLUS FUTURE'
 
 // ── Firebase ─────────────────────────────────────────────────────────
+// Uses the modular entry points (firebase-admin/app, firebase-admin/messaging),
+// which work on every firebase-admin version from v10 up. The old
+// `require('firebase-admin').credential` namespace is not present in all builds.
 
-let messaging = null
+let fcm = null
 let initTried = false
 
 function getMessaging() {
-  if (messaging || initTried) return messaging
+  if (fcm || initTried) return fcm
   initTried = true
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT
   if (!raw) {
@@ -23,13 +26,20 @@ function getMessaging() {
     return null
   }
   try {
-    const admin = require('firebase-admin')
-    const app = admin.initializeApp({ credential: admin.credential.cert(JSON.parse(raw)) })
-    messaging = admin.messaging(app)
+    const { initializeApp, getApps, cert } = require('firebase-admin/app')
+    const { getMessaging: getFirebaseMessaging } = require('firebase-admin/messaging')
+
+    const account = JSON.parse(raw)
+    // Hosting dashboards often turn the key's "\n" into a literal backslash-n.
+    if (account.private_key) account.private_key = account.private_key.replace(/\\n/g, '\n')
+
+    const app = getApps()[0] || initializeApp({ credential: cert(account) })
+    fcm = getFirebaseMessaging(app)
+    console.log('[Push] Firebase ready')
   } catch (err) {
     console.error('[Push] Firebase init failed:', err.message)
   }
-  return messaging
+  return fcm
 }
 
 // ── KES rate ─────────────────────────────────────────────────────────
@@ -103,8 +113,8 @@ function buildMessageText({ id, when, kesCents, balanceCents }) {
 // ── Sending ──────────────────────────────────────────────────────────
 
 async function sendToUser(userId, { title, body, withdrawalId }) {
-  const fcm = getMessaging()
-  if (!fcm) return
+  const messaging = getMessaging()
+  if (!messaging) return
 
   const { data: rows, error } = await db.supabase
     .from('device_tokens').select('token').eq('user_id', userId)
@@ -114,7 +124,7 @@ async function sendToUser(userId, { title, body, withdrawalId }) {
 
   // Data-only + high priority: the app builds the notification itself, so it
   // looks the same whether the app is open or closed.
-  const result = await fcm.sendEachForMulticast({
+  const result = await messaging.sendEachForMulticast({
     tokens,
     data: { title, body, withdrawalId: String(withdrawalId) },
     android: { priority: 'high', ttl: 60 * 60 * 1000 },
