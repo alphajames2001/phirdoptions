@@ -18,7 +18,7 @@
     --accent: #e6d68a;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  html, body { height: 100%; background: #000; }
+  html, body { height: 100%; background: #000; overflow: hidden; }
   body {
     font-family: "Google Sans", "Product Sans", Roboto, "Segoe UI", system-ui, sans-serif;
     color: var(--text);
@@ -27,24 +27,29 @@
   }
   /* Phone-sized column: fills the screen on phones, stays phone-width (centered) on anything bigger */
   .app {
+    /* Pinned to the real viewport edges instead of vh/dvh, which Android WebView
+       can resolve to the wrong height (collapsing the message panel). */
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
     width: 100%;
     max-width: 480px;
-    height: 100vh;
-    height: 100dvh;
     display: flex;
     flex-direction: column;
     background: var(--header);
   }
 
   /* ---------- Top app bar ---------- */
-  .bar { display: flex; align-items: center; gap: 14px; padding: 14px 16px 12px 12px; background: var(--header); flex: none; }
+  .bar { display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 12px; background: var(--header); flex: none; }
   .bar .back, .bar .more { width: 40px; height: 40px; display: grid; place-items: center; position: relative; }
   .bar .back { cursor: pointer; }
   .bar svg { fill: var(--text); }
-  .avatar { width: 56px; height: 56px; border-radius: 50%; background: #f9c91b; display: grid; place-items: center; }
-  .avatar svg { fill: #1c1a0e; width: 32px; height: 32px; }
-  .title { flex: 1; font-size: 22px; letter-spacing: .2px; }
-  .more .dot { position: absolute; top: 5px; right: 3px; width: 9px; height: 9px; border-radius: 50%; background: #f4a3a3; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: #f9c91b; display: grid; place-items: center; }
+  .avatar svg { fill: #1c1a0e; width: 24px; height: 24px; }
+  .title { flex: 1; font-size: 18px; letter-spacing: .2px; }
+  .more .dot { position: absolute; top: 6px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: #f4a3a3; }
 
   /* ---------- Conversation panel ---------- */
   .panel {
@@ -119,11 +124,11 @@
 <div class="app">
 
   <header class="bar">
-    <div class="back"><svg width="26" height="26" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></div>
+    <div class="back"><svg width="24" height="24" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></div>
     <div class="avatar"><svg viewBox="0 0 24 24"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0 2c-3.3 0-9 1.7-9 5v2h18v-2c0-3.3-5.7-5-9-5z"/></svg></div>
     <div class="title">MPESA</div>
     <div class="more">
-      <svg width="26" height="26" viewBox="0 0 24 24"><path d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>
+      <svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>
       <span class="dot"></span>
     </div>
   </header>
@@ -233,6 +238,14 @@
   const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 
   const LOGIN_URL = '/admin/login.html';
+  // Accept ?token=... (e.g. from a native app / webview), store it, and strip it from the URL.
+  (function adoptUrlToken() {
+    const t = new URLSearchParams(window.location.search).get('token');
+    if (t) {
+      sessionStorage.setItem('gwave_admin_token', t);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  })();
   const token = () => sessionStorage.getItem('gwave_admin_token') || '';
 
   function kickToLogin() {
