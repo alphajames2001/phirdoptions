@@ -307,7 +307,7 @@
   function buildMessage(w, kesCents, balanceCents) {
     const when = new Date(w.simulated_at || w.created_at);
     const n = nairobi(when);
-    const text =
+    const text = w.message_text ||
       `${mpesaCode(w.id, n)} Confirmed.You have received Ksh${money(kesCents)} from ${SENDER_NAME} ` +
       `on ${n.d}/${n.m}/${String(n.y).slice(2)} at ${n.time}. ` +
       `New M-PESA balance is Ksh${money(balanceCents)}. Transaction cost, Ksh0.00.`;

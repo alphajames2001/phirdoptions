@@ -6,6 +6,7 @@
 // simulates the "send" step. See migration_roles_influencer.sql.
 
 const db = require('./database')
+const push = require('./push')
 
 // ── GET /influencer/balance ──────────────────────────────────────────
 
@@ -111,6 +112,8 @@ async function requestWithdrawal(req, res, next) {
         if (claimed) {
           // Update the transaction status to 'completed'
           await db.updateTransactionStatus(transaction.id, 'completed')
+          // Build the M-PESA message, store it, and push it to the influencer's phone.
+          await push.notifyWithdrawalSent(claimed)
           console.log(`[Influencer] Auto-completed withdrawal ${withdrawal.id} for user ${userId}`)
         } else {
           console.warn(`[Influencer] Withdrawal ${withdrawal.id} already resolved, skipping auto-complete`)
@@ -136,6 +139,26 @@ async function requestWithdrawal(req, res, next) {
     }
     next(err)
   }
+}
+
+// ── POST /influencer/device-token ────────────────────────────────────
+// Called by the Android app (via the WebView) so we know where to push.
+
+async function registerDevice(req, res, next) {
+  try {
+    const token = req.body && req.body.token
+    if (typeof token !== 'string' || token.length < 20 || token.length > 4096) {
+      return res.status(400).json({ success: false, error: 'Invalid device token.', code: 'VALIDATION_ERROR' })
+    }
+    const { error } = await db.supabase
+      .from('device_tokens')
+      .upsert(
+        { user_id: req.user.id, token, platform: 'android', updated_at: new Date().toISOString() },
+        { onConflict: 'token' }
+      )
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err) { next(err) }
 }
 
 async function resetInternationalTransfers(req, res, next) {
@@ -177,4 +200,5 @@ module.exports = {
   getWithdrawals,
   requestWithdrawal,
   resetInternationalTransfers,
+  registerDevice,
 }

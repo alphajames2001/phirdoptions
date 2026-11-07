@@ -6,15 +6,12 @@ const express = require('express')
 const cors = require('cors')
 const morgan = require('morgan')
 const { WebSocketServer } = require('ws')
-const { createClient } = require('@supabase/supabase-js')
 
 const db = require('./database')
 const mw = require('./middleware')
 const auth = require('./auth')
 const wallet = require('./wallet')
-const payments = require('./payments')
 const market = require('./market')
-const houseEdge = require('./houseEdge')
 const admin = require('./admin')
 const exchange = require('./exchange')
 const influencer = require('./influencer')
@@ -23,16 +20,6 @@ const redis = require('./redis')
 const app = express()
 const httpServer = http.createServer(app)
 
-// Behind a reverse proxy every request arrives from the proxy's IP, so
-// without this the rate limiter counts ALL users as one client. Set
-// TRUST_PROXY to the number of proxy hops in front of the app (usually 1).
-// Left unset it does nothing, which is correct when there is no proxy:
-// trusting X-Forwarded-For with no proxy lets clients spoof their IP.
-if (process.env.TRUST_PROXY) {
-  const v = process.env.TRUST_PROXY
-  app.set('trust proxy', /^\d+$/.test(v) ? parseInt(v, 10) : v === 'true' ? true : v === 'false' ? false : v)
-}
-
 // ── Global middleware ──────────────────────────────────────────────
 
 app.use(mw.securityHeaders())
@@ -40,9 +27,6 @@ app.use(cors(mw.corsOptions))
 app.use(express.json({ limit: '10kb' }))
 app.use(morgan('combined'))
 app.use(mw.apiLimiter)
-
-// Debug page gate: must come before static serving (see houseEdge.js).
-houseEdge.registerPageGate(app)
 
 //static file serving
 app.use(express.static('public'));
@@ -132,10 +116,6 @@ app.post('/admin/login', async (req, res) => {
       success: true,
       data: {
         token: data.session.access_token,
-        // Only influencers get a refresh token. It lets their device stay
-        // signed in until they log out manually. Admin sessions stay
-        // short-lived on purpose.
-        ...(role === 'influencer' ? { refreshToken: data.session.refresh_token } : {}),
         user: {
           id: data.user.id,
           email: data.user.email,
@@ -154,63 +134,6 @@ app.post('/admin/login', async (req, res) => {
   }
 });
 
-// ── Influencer session refresh ────────────────────────────────────
-// Trades a refresh token for a fresh access token so influencers stay
-// signed in until they log out. Uses a throwaway client per call: the
-// shared mw.supabaseAuth client keeps session state in memory, and
-// refreshing on it would mix up different users' sessions.
-// Supabase rotates refresh tokens, so the response carries a new one
-// that replaces the old.
-app.post('/admin/refresh', async (req, res) => {
-  try {
-    const { refreshToken } = req.body || {}
-    if (!refreshToken || typeof refreshToken !== 'string' || refreshToken.length > 512) {
-      return res.status(400).json({ success: false, error: 'Refresh token required.', code: 'VALIDATION_ERROR' })
-    }
-
-    const client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    })
-    const { data, error } = await client.auth.refreshSession({ refresh_token: refreshToken })
-
-    if (error || !data?.session || !data?.user) {
-      return res.status(401).json({ success: false, error: 'Session expired. Please log in again.', code: 'TOKEN_EXPIRED' })
-    }
-
-    // Re-check the role on every refresh so a demoted or removed
-    // influencer can't stay signed in indefinitely.
-    const role = await mw.resolveRole(data.user.id)
-    if (role !== 'influencer') {
-      return res.status(403).json({ success: false, error: 'Access denied.', code: 'FORBIDDEN' })
-    }
-
-    res.json({
-      success: true,
-      data: {
-        token: data.session.access_token,
-        refreshToken: data.session.refresh_token,
-        user: { id: data.user.id, email: data.user.email, role },
-      },
-    })
-  } catch (err) {
-    console.error('[Admin Refresh] Error:', err)
-    res.status(500).json({ success: false, error: 'Refresh failed.', code: 'SERVER_ERROR' })
-  }
-})
-
-// ── Logout: revoke the session on Supabase ────────────────────────
-// Best effort and deliberately unauthenticated: the access token may
-// already have expired by the time the user taps logout, and the client
-// clears its own storage regardless. Supabase only acts on a valid JWT.
-app.post('/admin/logout', async (req, res) => {
-  const h = req.headers.authorization || ''
-  const token = h.startsWith('Bearer ') ? h.slice(7) : null
-  if (token) {
-    try { await db.supabase.auth.admin.signOut(token, 'local') } catch (_) { /* ignore */ }
-  }
-  res.json({ success: true })
-})
-
 // ── Auth routes ────────────────────────────────────────────────────
 
 app.post('/auth/on-signup', auth.onSignup)
@@ -218,77 +141,32 @@ app.get('/auth/me', mw.authenticate, auth.getMe)
 app.patch('/auth/profile', mw.authenticate, mw.validators.updateProfile, mw.validate, auth.updateProfile)
 app.get('/auth/profile', mw.authenticate, auth.getProfile)
 
-// ── Trade timing (opt-in) ──────────────────────────────────────────
-// TRADE_TIMING=true logs one line per trade request with the time spent in
-// each stage, e.g.  [timing] POST /trade/place total=212ms auth+validate=3ms account=1ms rpc=207ms
-const TRADE_TIMING = process.env.TRADE_TIMING === 'true'
-
-function tradeTiming() {
-  return (req, res, next) => {
-    if (!TRADE_TIMING) return next()
-    const start = process.hrtime.bigint()
-    let last = start
-    const parts = []
-    req.timing = {
-      mark(name) {
-        const now = process.hrtime.bigint()
-        parts.push(`${name}=${Math.round(Number(now - last) / 1e6)}ms`)
-        last = now
-      },
-    }
-    res.on('finish', () => {
-      const total = Math.round(Number(process.hrtime.bigint() - start) / 1e6)
-      console.log(`[timing] ${req.method} ${req.path} total=${total}ms ${parts.join(' ')}`)
-    })
-    next()
-  }
-}
-
-const mark = (req, name) => { if (req.timing) req.timing.mark(name) }
-
 // ── Trade routes ───────────────────────────────────────────────────
 
 app.get('/trade/symbols', (req, res) => {
   res.json({ success: true, data: { symbols: Object.values(market.SYMBOLS) } })
 })
 
-// Outside DEBUG_MODE (accountClass === null) this is exactly the original
-// parsing, which turns a numeric 0 into null (0 is falsy). In debug mode 0 is
-// kept as a real barrier so the house-edge maths prices it correctly.
-const parseDigit = (v, accountClass) => {
-  if (accountClass) return v === undefined || v === null || v === '' ? null : parseInt(v)
-  return v ? parseInt(v) : null
-}
-
-app.get('/trade/payout-preview', async (req, res, next) => {
-  try {
-    const { contractType, stake, direction, selectedDigit, accountType } = req.query
-    if (!contractType || !stake) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'contractType and stake required.', 
-        code: 'VALIDATION_ERROR' 
-      })
-    }
-    // Account class only matters in DEBUG_MODE (null otherwise).
-    const accountClass = await houseEdge.resolveClass({
-      accountType,
-      userId: houseEdge.optionalUserId(req),
+app.get('/trade/payout-preview', (req, res) => {
+  const { contractType, stake, direction, selectedDigit } = req.query
+  if (!contractType || !stake) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'contractType and stake required.', 
+      code: 'VALIDATION_ERROR' 
     })
-    const payout = market.calculatePayout(contractType, parseFloat(stake), direction, parseDigit(selectedDigit, accountClass), accountClass)
-    res.json({ success: true, data: { potentialPayout: payout } })
-  } catch (err) { next(err) }
+  }
+  const payout = market.calculatePayout(contractType, parseFloat(stake), direction, selectedDigit ? parseInt(selectedDigit) : null)
+  res.json({ success: true, data: { potentialPayout: payout } })
 })
 
 app.post('/trade/place', 
-  tradeTiming(),
   mw.authenticate, 
   mw.validators.placeTrade, 
   mw.validate, 
   async (req, res, next) => {
     try {
       const { accountType, symbol, contractType, direction, selectedDigit, stake, durationTicks } = req.body
-      mark(req, 'auth+validate')
 
       // Only the account id is needed here, and that comes from the
       // Redis cache (falling back to the database on a miss), so the
@@ -302,8 +180,6 @@ app.post('/trade/place',
         })
       }
 
-      mark(req, 'account')
-
       const tick = market.getLatestTick(symbol)
       if (!tick) {
         return res.status(503).json({ 
@@ -313,9 +189,7 @@ app.post('/trade/place',
         })
       }
 
-      // Account class only matters in DEBUG_MODE (null otherwise).
-      const accountClass = await houseEdge.resolveClass({ accountType, userId: req.user.id })
-      const potentialPayout = market.calculatePayout(contractType, parseFloat(stake), direction, parseDigit(selectedDigit, accountClass), accountClass)
+      const potentialPayout = market.calculatePayout(contractType, parseFloat(stake), direction, selectedDigit ? parseInt(selectedDigit) : null)
 
       // Deduct + record the stake + create the contract in one round trip
       // (place_trade does all three in a single transaction, so the stake
@@ -332,20 +206,6 @@ app.post('/trade/place',
         entryPrice: tick.price,
         entryTick: tick.tick,
         durationTicks: parseInt(durationTicks),
-      })
-      mark(req, 'rpc')
-
-      // Mirror the new contract in the engine's in-memory index so expiry
-      // is detected without polling the database.
-      market.trackContract(contract)
-
-      // DEBUG_MODE only: decide now whether this trade is a forced win/loss,
-      // so every settle path agrees. No-op unless an admin targeted this account.
-      houseEdge.registerContract({
-        contractId: contract.id,
-        userId: req.user.id,
-        accountType,
-        accountClass,
       })
 
       res.json({
@@ -373,39 +233,19 @@ app.post('/trade/place',
 
 // ── Trade Settlement Endpoint ─────────────────────────────
 
-// Client-initiated settle. The engine settles every contract at its expiry
-// tick on its own; this endpoint exists so the client can fetch the result
-// (and as a fallback if a push was missed). It can only settle a contract
-// that has EXPIRED - it is not an early-exit/cashout, which would need its
-// own discounted payout instead of the stored potential_payout.
 app.post('/trade/settle/:contractId',
-  tradeTiming(),
   mw.authenticate,
   async (req, res, next) => {
     try {
       const { contractId } = req.params
-      mark(req, 'auth')
 
-      // The engine's in-memory index knows every open contract, and
-      // contracts it settled in the last few minutes, so the common case
-      // needs no database read before the settle call.
-      let contract
-      let isOpen
-      const known = market.lookupContract(contractId)
-      if (known) {
-        contract = known.contract
-        isOpen = known.open
-      } else {
-        contract = await db.getContractById(contractId)
-        mark(req, 'lookup')
-        if (!contract) {
-          return res.status(404).json({
-            success: false,
-            error: 'Contract not found.',
-            code: 'NOT_FOUND'
-          })
-        }
-        isOpen = contract.status === 'open'
+      const contract = await db.getContractById(contractId)
+      if (!contract) {
+        return res.status(404).json({
+          success: false,
+          error: 'Contract not found.',
+          code: 'NOT_FOUND'
+        })
       }
 
       if (contract.user_id !== req.user.id) {
@@ -416,6 +256,11 @@ app.post('/trade/settle/:contractId',
         })
       }
 
+      // The exit price comes from the engine, never from the request
+      // body. The client used to submit its own exitPrice and that value
+      // was used to resolve the outcome, which meant the caller could
+      // pick the price its own trade was settled at. The engine's live
+      // tick is the authoritative price for the symbol.
       const tick = market.getLatestTick(contract.symbol)
       if (!tick) {
         return res.status(503).json({
@@ -425,24 +270,7 @@ app.post('/trade/settle/:contractId',
         })
       }
 
-      // An open contract cannot be settled before its expiry tick. Without
-      // this check a caller could settle the moment the price moved in their
-      // favour and collect the full payout.
-      const expiryTick = parseInt(contract.entry_tick) + parseInt(contract.duration_ticks)
-      if (isOpen && tick.tick < expiryTick) {
-        return res.status(409).json({
-          success: false,
-          error: 'Contract has not expired yet.',
-          code: 'NOT_EXPIRED',
-          data: { ticksRemaining: expiryTick - tick.tick }
-        })
-      }
-
-      // The exit price comes from the engine, never from the request body,
-      // and is the price of the EXPIRY tick (what the engine would have used)
-      // rather than whatever the latest tick is when this call arrives.
-      const exitPrice = market.getTickPrice(contract.symbol, expiryTick) ?? tick.price
-      const outcome = market.resolveOutcome(contract, exitPrice)
+      const outcome = market.resolveOutcome(contract, tick.price)
 
       // settle_contracts claims the contract atomically, so if the
       // engine's tick loop got there first this returns the settled
@@ -450,12 +278,11 @@ app.post('/trade/settle/:contractId',
       const results = await db.settleContracts([
         {
           contract_id: contract.id,
-          exit_price: exitPrice,
+          exit_price: tick.price,
           outcome,
           settled_at: new Date().toISOString(),
         },
       ])
-      mark(req, 'rpc')
 
       const result = results[0]
       if (!result) {
@@ -466,12 +293,10 @@ app.post('/trade/settle/:contractId',
         })
       }
 
-      market.markSettled(result.contract_id)
-
       const data = {
         contractId: result.contract_id,
         outcome: result.outcome,
-        exitPrice: result.exit_price !== undefined && result.exit_price !== null ? parseFloat(result.exit_price) : exitPrice,
+        exitPrice: result.exit_price !== undefined && result.exit_price !== null ? parseFloat(result.exit_price) : tick.price,
         pnl: parseFloat(result.pl),
         newBalance: parseFloat(result.new_balance),
         accountType: result.account_type,
@@ -578,9 +403,6 @@ app.post('/wallet/deposit/mpesa',
 )
 
 app.post('/wallet/mpesa/callback', wallet.mpesaCallback)
-
-// PalPluss webhook + admin provider switch (GET/PUT /admin/payments/provider)
-payments.registerRoutes(app, { mw })
 
 app.post('/wallet/withdraw/mpesa', 
   mw.authenticate, 
@@ -712,9 +534,6 @@ app.get('/admin/transactions',
     admin.getDailyStats
   )
 
-// ── Debug-only: house edge controls (inactive unless DEBUG_MODE=true) ──
-houseEdge.registerRoutes(app, { mw, market })
-
 app.get('/admin/influencer-withdrawals',
   mw.authenticate,
   mw.requireRole('admin'),
@@ -760,6 +579,12 @@ app.post('/influencer/withdraw',
   influencer.requestWithdrawal
 )
 
+app.post('/influencer/device-token',
+  mw.authenticate,
+  mw.requireRole('influencer'),
+  influencer.registerDevice
+)
+
 app.post('/influencer/reset-international-transfers',
   mw.authenticate,
   mw.requireRole('influencer'),
@@ -798,7 +623,7 @@ async function start() {
   await redis.connectRedis()
   
   exchange.startExchangeRateUpdater()
-  await market.startEngine()
+  market.startEngine()
   console.log('[G Wave] Market engine started')
 
   const port = process.env.PORT || 4000
