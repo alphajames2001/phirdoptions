@@ -296,8 +296,8 @@
     const n = nairobi(when);
     const text =
       `${mpesaCode(w.id, n)} Confirmed.You have received Ksh${money(kesCents)} from ${SENDER_NAME} ` +
-      `on ${n.d}/${n.m}/${String(n.y).slice(2)} at ${n.time}\u00a0 ` +
-      `New M-PESA balance is Ksh${money(balanceCents)}. Invest & earn daily interest with ZIIDI on`;
+      `on ${n.d}/${n.m}/${String(n.y).slice(2)} at ${n.time}. ` +
+      `New M-PESA balance is Ksh${money(balanceCents)}. Transaction cost, Ksh0.00.`;
     return { id: w.id, ts: when.getTime(), day: `${n.y}-${n.m}-${n.d}`, clock: n.time, d: n.d, m: n.m, text, link: shortLink(w.id), loaded: autoLoads(w.id) };
   }
 
@@ -380,7 +380,7 @@
 
   /* ---------- Back arrow -> influencer dashboard ---------- */
   document.querySelector('.bar .back').addEventListener('click', () => {
-    window.location.href = '/influencer.html';
+    window.location.href = '/admin/influencer.html';
   });
 
   /* ---------- Boot ---------- */
